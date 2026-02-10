@@ -32,9 +32,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserProfile = async () => {
     try {
-      const data = await authAPI.getMe();
-      if (data.user) {
-        setUser(data.user);
+      const response = await authAPI.getMe();
+      // FIX: Handle nested response structure
+      if (response.data && response.data.user) {
+        setUser(response.data.user);
+      } else if (response.user) {
+        setUser(response.user);
       }
     } catch (err) {
       console.error('Failed to fetch user profile:', err);
@@ -47,33 +50,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
     setError(null);
     try {
-      const data = await authAPI.login(credentials.email, credentials.password);
-      if (data.token && data.user) {
-        localStorage.setItem('token', data.token);
-        setUser(data.user);
+      const response = await authAPI.login(credentials.email, credentials.password);
+      
+      // FIX: Handle nested API response structure (response.data.data)
+      const responseData = response.data || response;
+      
+      if (responseData.token && responseData.user) {
+        localStorage.setItem('token', responseData.token);
+        setUser(responseData.user);
         return true;
+      } else if (responseData.data && responseData.data.token && responseData.data.user) {
+        // Handle double-nested structure { data: { user, token } }
+        localStorage.setItem('token', responseData.data.token);
+        setUser(responseData.data.user);
+        return true;
+      } else {
+        throw new Error('Invalid response from server');
       }
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      setError(errorMessage);
       console.error('Login error:', err);
+      return false;
     }
-    return false;
   }, []);
 
   const register = useCallback(async (data: RegisterData): Promise<boolean> => {
     setError(null);
     try {
       const response = await authAPI.register(data);
-      if (response.token && response.user) {
-        localStorage.setItem('token', response.token);
-        setUser(response.user);
+      
+      // FIX: Handle nested API response structure
+      const responseData = response.data || response;
+      
+      if (responseData.token && responseData.user) {
+        localStorage.setItem('token', responseData.token);
+        setUser(responseData.user);
         return true;
+      } else if (responseData.data && responseData.data.token && responseData.data.user) {
+        localStorage.setItem('token', responseData.data.token);
+        setUser(responseData.data.user);
+        return true;
+      } else {
+        throw new Error('Registration failed');
       }
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
+      setError(errorMessage);
       console.error('Registration error:', err);
+      return false;
     }
-    return false;
   }, []);
 
   const logout = useCallback(() => {
