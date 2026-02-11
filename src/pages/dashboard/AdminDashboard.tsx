@@ -6,7 +6,8 @@ import {
   Plus, Edit2, Trash2, DollarSign, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, api } from '@/services/api'; // ✅ Added api import
+import api from '@/services/api';
+import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI } from '@/services/api'; // ✅ Added api import
 import type { Teacher, Subject } from '@/types';
 
 const AdminDashboard: React.FC = () => {
@@ -498,10 +499,10 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td>
                     <span className={`badge ${
-                      teacher.verificationStatus === 'approved' || teacher.status === 'approved' ? 'badge-approved' :
-                      teacher.verificationStatus === 'pending' || teacher.status === 'pending' ? 'badge-pending' : 'badge-rejected'
+                      teacher.verification_status === 'approved' ? 'badge-approved' :
+                      teacher.verification_status === 'pending' ? 'badge-pending' : 'badge-rejected'
                     }`}>
-                      {teacher.verificationStatus || teacher.status}
+                      {teacher.verification_status}
                     </span>
                   </td>
                   <td>{new Date(teacher.createdAt || teacher.submitted_at || teacher.created_at).toLocaleDateString()}</td>
@@ -860,7 +861,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {(selectedTeacher.verificationStatus === 'pending' || selectedTeacher.status === 'pending') && (
+              {(selectedTeacher.verification_status === 'pending') && (
                 <div className="flex space-x-4">
                   <button 
                     onClick={() => handleApproveTeacher(selectedTeacher.id)}
