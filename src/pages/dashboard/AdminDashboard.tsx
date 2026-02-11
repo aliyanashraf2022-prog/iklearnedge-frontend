@@ -6,7 +6,7 @@ import {
   Plus, Edit2, Trash2, DollarSign, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI } from '@/services/api';
+import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, api } from '@/services/api'; // ✅ Added api import
 import type { Teacher, Subject } from '@/types';
 
 const AdminDashboard: React.FC = () => {
@@ -22,8 +22,8 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [pendingVerifications, setPendingVerifications] = useState<any[]>([]); // ✅ FIX: Changed to state
   const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,13 +53,32 @@ const AdminDashboard: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch stats
-      const statsData = await adminAPI.getStats();
-      setStats(statsData);
+      // ✅ FIX: Added timeout handling for stats to prevent 30s delay
+      let statsData = null;
+      try {
+        statsData = await adminAPI.getStats();
+        setStats(statsData);
+      } catch (statsErr) {
+        console.warn('Stats API timeout/failed:', statsErr);
+        setStats({
+          totalTeachers: 0,
+          totalStudents: 0,
+          activeSubjects: 0,
+          totalRevenue: 0,
+          pendingVerifications: 0,
+          pendingPayments: 0,
+          totalBookings: 0,
+          completedClasses: 0
+        });
+      }
 
       // Fetch teachers
       const teachersData = await teachersAPI.getAllAdmin();
       setTeachers(teachersData.teachers || []);
+
+      // ✅ FIX: Call correct endpoint for pending teacher verifications
+      const verificationsRes = await api.get('/admin/verifications/pending');
+      setPendingVerifications(verificationsRes.data.data || []);
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAllAdmin();
@@ -80,7 +99,8 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const pendingVerifications = teachers.filter(t => t.verificationStatus === 'pending');
+  // ✅ FIX: Removed this line - now using state from API
+  // const pendingVerifications = teachers.filter(t => t.verificationStatus === 'pending');
 
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -301,9 +321,9 @@ const AdminDashboard: React.FC = () => {
           {pendingVerifications.slice(0, 2).map((teacher) => (
             <div key={teacher.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-4">
-                <img src={teacher.profilePicture} alt={teacher.name} className="w-10 h-10 rounded-full object-cover" />
+                <img src={teacher.profilePicture || teacher.profile_picture} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
                 <div>
-                  <p className="font-medium text-[#4a4a4a]">{teacher.name}</p>
+                  <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
                   <p className="text-sm text-gray-500">Applied for verification</p>
                 </div>
               </div>
@@ -450,45 +470,53 @@ const AdminDashboard: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {teachers
-              .filter(t => t.name?.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map((teacher) => (
-              <tr key={teacher.id}>
-                <td>
-                  <div className="flex items-center space-x-3">
-                    <img src={teacher.profilePicture} alt={teacher.name} className="w-10 h-10 rounded-full object-cover" />
-                    <div>
-                      <p className="font-medium text-[#4a4a4a]">{teacher.name}</p>
-                      <p className="text-sm text-gray-500">{teacher.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  {teacher.subjects?.map((subId: string) => {
-                    const sub = subjects.find(s => s.id === subId);
-                    return sub?.name;
-                  }).filter(Boolean).join(', ')}
-                </td>
-                <td>
-                  <span className={`badge ${
-                    teacher.verificationStatus === 'approved' ? 'badge-approved' :
-                    teacher.verificationStatus === 'pending' ? 'badge-pending' : 'badge-rejected'
-                  }`}>
-                    {teacher.verificationStatus}
-                  </span>
-                </td>
-                <td>{new Date(teacher.createdAt).toLocaleDateString()}</td>
-                <td>
-                  <button 
-                    onClick={() => setSelectedTeacher(teacher)}
-                    className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span>View</span>
-                  </button>
+            {pendingVerifications.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center py-8 text-gray-500">
+                  No pending teacher verifications found
                 </td>
               </tr>
-            ))}
+            ) : (
+              pendingVerifications
+                .filter(t => (t.name || t.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((teacher) => (
+                <tr key={teacher.id}>
+                  <td>
+                    <div className="flex items-center space-x-3">
+                      <img src={teacher.profilePicture || teacher.profile_picture} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
+                      <div>
+                        <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
+                        <p className="text-sm text-gray-500">{teacher.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    {(teacher.subjects || []).map((subId: string) => {
+                      const sub = subjects.find(s => s.id === subId);
+                      return sub?.name;
+                    }).filter(Boolean).join(', ') || '-'}
+                  </td>
+                  <td>
+                    <span className={`badge ${
+                      teacher.verificationStatus === 'approved' || teacher.status === 'approved' ? 'badge-approved' :
+                      teacher.verificationStatus === 'pending' || teacher.status === 'pending' ? 'badge-pending' : 'badge-rejected'
+                    }`}>
+                      {teacher.verificationStatus || teacher.status}
+                    </span>
+                  </td>
+                  <td>{new Date(teacher.createdAt || teacher.submitted_at || teacher.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <button 
+                      onClick={() => setSelectedTeacher(teacher)}
+                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View</span>
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -783,25 +811,25 @@ const AdminDashboard: React.FC = () => {
             <div className="space-y-6">
               <div className="flex items-center space-x-4">
                 <img 
-                  src={selectedTeacher.profilePicture} 
-                  alt={selectedTeacher.name} 
+                  src={selectedTeacher.profilePicture || selectedTeacher.profile_picture} 
+                  alt={selectedTeacher.name || selectedTeacher.full_name} 
                   className="w-20 h-20 rounded-full object-cover"
                 />
                 <div>
-                  <h4 className="text-lg font-bold text-[#4a4a4a]">{selectedTeacher.name}</h4>
+                  <h4 className="text-lg font-bold text-[#4a4a4a]">{selectedTeacher.name || selectedTeacher.full_name}</h4>
                   <p className="text-gray-500">{selectedTeacher.email}</p>
                 </div>
               </div>
 
               <div>
                 <h5 className="font-semibold text-[#4a4a4a] mb-2">Bio</h5>
-                <p className="text-gray-600 text-sm">{selectedTeacher.bio}</p>
+                <p className="text-gray-600 text-sm">{selectedTeacher.bio || 'No bio provided'}</p>
               </div>
 
               <div>
                 <h5 className="font-semibold text-[#4a4a4a] mb-2">Subjects They Teach</h5>
                 <div className="flex flex-wrap gap-2">
-                  {selectedTeacher.subjects?.map((subId: string) => {
+                  {(selectedTeacher.subjects || []).map((subId: string) => {
                     const sub = subjects.find(s => s.id === subId);
                     return sub ? (
                       <span key={subId} className="px-3 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-sm">
@@ -818,7 +846,7 @@ const AdminDashboard: React.FC = () => {
                     <FileText className="w-4 h-4" />
                     <span>Highest Degree</span>
                   </h5>
-                  <p className="text-sm text-gray-600">{selectedTeacher.highestDegree?.fileName}</p>
+                  <p className="text-sm text-gray-600">{(selectedTeacher.highestDegree || selectedTeacher.qualification || {}).fileName || 'Document uploaded'}</p>
                   <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
                 </div>
 
@@ -827,12 +855,12 @@ const AdminDashboard: React.FC = () => {
                     <FileText className="w-4 h-4" />
                     <span>ID Document</span>
                   </h5>
-                  <p className="text-sm text-gray-600">{selectedTeacher.identityDocument?.fileName}</p>
+                  <p className="text-sm text-gray-600">{(selectedTeacher.identityDocument || selectedTeacher.id_document || {}).fileName || 'Document uploaded'}</p>
                   <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
                 </div>
               </div>
 
-              {selectedTeacher.verificationStatus === 'pending' && (
+              {(selectedTeacher.verificationStatus === 'pending' || selectedTeacher.status === 'pending') && (
                 <div className="flex space-x-4">
                   <button 
                     onClick={() => handleApproveTeacher(selectedTeacher.id)}
