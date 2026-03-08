@@ -329,6 +329,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
         />
       </div>
 
+        <div>
+          <label className="form-label">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="form-input min-h-[60px]"
+            placeholder="Short description about yourself (max 200 chars)"
+            maxLength={200}
+            required
+          />
+        </div>
+
       <div>
         <label className="form-label">Subjects You Teach</label>
         <div className="flex flex-wrap gap-2">

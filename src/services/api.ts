@@ -26,28 +26,28 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 // Auth API
 export const authAPI = {
   login: (email: string, password: string) =>
-    apiCall('/auth/login', {
+     apiCall('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   
   register: (userData: any) =>
-    apiCall('/auth/register', {
+     apiCall('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
   
   getMe: () =>
-    apiCall('/auth/me'),
+     apiCall('/api/auth/me'),
   
   updateProfile: (data: any) =>
-    apiCall('/auth/profile', {
+     apiCall('/api/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   
   changePassword: (currentPassword: string, newPassword: string) =>
-    apiCall('/auth/change-password', {
+     apiCall('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
     }),

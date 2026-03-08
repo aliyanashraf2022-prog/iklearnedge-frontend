@@ -49,6 +49,11 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
+                        <a href="/about-us" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>About Us</a>
+                        <a href="/contact-us" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Contact Us</a>
+                        <a href="/faqs" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>FAQs</a>
+                        <a href="/terms" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Terms and Conditions</a>
+                        <a href="/privacy" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Privacy Policy</a>
             <button 
               onClick={() => scrollToSection('hero')}
               className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
@@ -56,6 +61,15 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
               }`}
             >
               Home
+            </button>
+
+            <button 
+              onClick={() => window.location.href='/our-team'}
+              className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
+                isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'
+              }`}
+            >
+              Our Team
             </button>
             
             {/* Subjects Dropdown */}
@@ -161,6 +175,11 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
       </div>
 
       {/* Mobile Menu */}
+                  <a href="/about-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">About Us</a>
+                  <a href="/contact-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Contact Us</a>
+                  <a href="/faqs" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">FAQs</a>
+                  <a href="/terms" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Terms and Conditions</a>
+                  <a href="/privacy" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Privacy Policy</a>
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white shadow-lg animate-slide-up">
           <div className="px-4 py-4 space-y-3">
@@ -187,6 +206,12 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
               className="block w-full text-left py-2 text-[#4a4a4a] font-medium"
             >
               Blog
+            </button>
+            <button 
+              onClick={() => window.location.href='/our-team'}
+              className="block w-full text-left py-2 text-[#4a4a4a] font-medium"
+            >
+              Our Team
             </button>
             
             {!user && (
