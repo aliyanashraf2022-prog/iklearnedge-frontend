@@ -115,6 +115,18 @@ const Footer: React.FC = () => {
           ))}
         </div>
 
+        {/* Contact Info */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="text-white/80 text-sm mb-2">
+            <span className="font-semibold">Phone:</span>
+            <a href="tel:+971507454001" className="ml-2 text-blue-300 hover:underline">+971507454001</a>
+          </div>
+          <div className="text-white/80 text-sm">
+            <span className="font-semibold">Email:</span>
+            <a href="mailto:rubina1.altaf@gmail.com" className="ml-2 text-blue-300 hover:underline">rubina1.altaf@gmail.com</a>
+          </div>
+        </div>
+
         {/* Newsletter */}
         <div className="max-w-md mx-auto mb-12">
           <h4 className="text-center text-lg font-semibold mb-4 font-['Poppins']">
