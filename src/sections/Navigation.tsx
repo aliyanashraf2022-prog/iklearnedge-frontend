@@ -55,11 +55,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-                        <a href="/about-us" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>About Us</a>
-                        <a href="/contact-us" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Contact Us</a>
-                        <a href="/faqs" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>FAQs</a>
-                        <a href="/terms" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Terms and Conditions</a>
-                        <a href="/privacy" className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'}`}>Privacy Policy</a>
             <button 
               onClick={() => scrollToSection('hero')}
               className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
@@ -128,29 +123,24 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
             <button
-              className="p-2 rounded-full bg-[#f5a623] text-white hover:bg-[#e09513] transition-colors"
+              className="btn-primary text-sm flex items-center space-x-2"
               onClick={() => setShowContact(!showContact)}
             >
-              <Phone className="w-5 h-5" />
+              <Phone className="w-5 h-5 mr-2" />
+              <span>Contact</span>
             </button>
             {showContact && (
               <div className="absolute top-16 right-32 bg-white shadow-lg rounded-lg p-4 z-50 flex flex-col text-[#4a4a4a]">
-              <div className="mb-2">
-                <span className="font-semibold">Phone:</span>
-                <a href="tel:+971507454001" className="ml-2 text-blue-600 hover:underline">+971507454001</a>
-              </div>
-              <div>
-                <span className="font-semibold">Email:</span>
-                <a href="mailto:rubina1.altaf@gmail.com" className="ml-2 text-blue-600 hover:underline">rubina1.altaf@gmail.com</a>
-              </div>
+                <div className="mb-2">
+                  <span className="font-semibold">Phone:</span>
+                  <a href="tel:+971507454001" className="ml-2 text-blue-600 hover:underline">+971507454001</a>
+                </div>
+                <div>
+                  <span className="font-semibold">Email:</span>
+                  <a href="mailto:rubina1.altaf@gmail.com" className="ml-2 text-blue-600 hover:underline">rubina1.altaf@gmail.com</a>
+                </div>
               </div>
             )}
-            <button
-              className="p-2 rounded-full bg-[#f5a623] text-white hover:bg-[#e09513] transition-colors"
-              onClick={() => setShowContact(!showContact)}
-            >
-              <Phone className="w-5 h-5" />
-            </button>
             
             {user ? (
               <div className="flex items-center space-x-3">
