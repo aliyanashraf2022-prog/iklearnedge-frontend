@@ -145,13 +145,12 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
               </div>
               </div>
             )}
-              href="https://api.whatsapp.com/send?phone=971507454001"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
               className="p-2 rounded-full bg-[#f5a623] text-white hover:bg-[#e09513] transition-colors"
+              onClick={() => setShowContact(!showContact)}
             >
               <Phone className="w-5 h-5" />
-            </a>
+            </button>
             
             {user ? (
               <div className="flex items-center space-x-3">
