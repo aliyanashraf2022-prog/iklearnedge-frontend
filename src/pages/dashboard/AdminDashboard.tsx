@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, UserCheck, CreditCard, 
-  Calendar, Settings, LogOut, CheckCircle, XCircle,
-  Eye, FileText, Bell, Search, Filter, BookOpen,
+  Calendar, Settings, CheckCircle,
+  Eye, Search, Filter, BookOpen,
   Plus, Edit2, Trash2, DollarSign, Loader2
 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import api from '@/services/api';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI } from '@/services/api'; // ✅ Added api import
+import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI } from '@/services/api';
 import type { Teacher, Subject } from '@/types';
 
 const AdminDashboard: React.FC = () => {
