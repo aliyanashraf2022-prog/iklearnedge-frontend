@@ -26,7 +26,6 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "kimi-plugin-inspect-react": "^0.1.0"
+    "babel-plugin-react-compiler": "^1.0.0"
   }
 }
