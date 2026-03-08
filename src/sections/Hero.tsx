@@ -138,7 +138,7 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted }) => {
                   <Users className="w-6 h-6 text-[#f5a623]" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">21.9 K+</div>
+
                   <div className="text-sm text-[#666666]">Students</div>
                 </div>
               </div>
@@ -148,7 +148,6 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted }) => {
                   <BookOpen className="w-6 h-6 text-[#f5a623]" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">63.3 K+</div>
                   <div className="text-sm text-[#666666]">Classes</div>
                 </div>
               </div>
