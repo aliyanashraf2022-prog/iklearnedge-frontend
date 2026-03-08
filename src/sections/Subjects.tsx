@@ -46,7 +46,7 @@ const subjects = [
     name: 'SAT',
     description: 'Comprehensive SAT preparation courses.',
     image: '/subject-sat.jpg',
-  }
+  },
   {
     id: 8,
     name: 'Accounting',
