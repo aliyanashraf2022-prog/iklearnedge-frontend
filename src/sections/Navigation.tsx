@@ -12,6 +12,7 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
   const { user, logout } = useAuth();
+  const [showContact, setShowContact] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -23,6 +24,11 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
+    if (!user && id === 'subjects') {
+      onLoginClick();
+      setIsMobileMenuOpen(false);
+      return;
+    }
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
@@ -122,6 +128,24 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
             <a 
+            <button
+              className="p-2 rounded-full bg-[#f5a623] text-white hover:bg-[#e09513] transition-colors"
+              onClick={() => setShowContact(!showContact)}
+            >
+              <Phone className="w-5 h-5" />
+            </button>
+            {showContact && (
+              <div className="absolute top-16 right-32 bg-white shadow-lg rounded-lg p-4 z-50 flex flex-col text-[#4a4a4a]">
+              <div className="mb-2">
+                <span className="font-semibold">Phone:</span>
+                <a href="tel:+971507454001" className="ml-2 text-blue-600 hover:underline">+971507454001</a>
+              </div>
+              <div>
+                <span className="font-semibold">Email:</span>
+                <a href="mailto:rubina1.altaf@gmail.com" className="ml-2 text-blue-600 hover:underline">rubina1.altaf@gmail.com</a>
+              </div>
+              </div>
+            )}
               href="https://api.whatsapp.com/send?phone=971507454001"
               target="_blank"
               rel="noopener noreferrer"
