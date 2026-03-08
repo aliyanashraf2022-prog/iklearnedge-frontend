@@ -3,10 +3,11 @@ import {
   Search, Calendar, Video, 
   Settings, LogOut, Star,
   Clock, DollarSign, Upload, CheckCircle, XCircle,
-  Bell, BookOpen, User, Info, Loader2
+  Bell, BookOpen, User, Info, Loader2, Eye, EyeOff,
+  Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI } from '@/services/api';
+import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI } from '@/services/api';
 import type { Teacher } from '@/types';
 
 const StudentDashboard: React.FC = () => {
@@ -20,6 +21,10 @@ const StudentDashboard: React.FC = () => {
   const [bookingStep, setBookingStep] = useState(1);
   const [selectedBookingSubject, setSelectedBookingSubject] = useState<string>('');
   const [bookingDuration, setBookingDuration] = useState<number>(60);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Data states
   const [student, setStudent] = useState<any>(null);
@@ -29,6 +34,20 @@ const StudentDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  
+  // Settings form state
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    gradeLevel: '',
+    profilePicture: ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   const sidebarItems = [
     { id: 'find-teachers', label: 'Find Teachers', icon: Search },
@@ -50,6 +69,13 @@ const StudentDashboard: React.FC = () => {
       // Fetch student profile
       const studentData = await studentsAPI.getProfile();
       setStudent(studentData.student);
+      setSettingsForm({
+        name: studentData.student?.name || '',
+        email: studentData.student?.email || '',
+        phoneNumber: studentData.student?.phoneNumber || '',
+        gradeLevel: studentData.student?.gradeLevel || '',
+        profilePicture: studentData.student?.profilePicture || ''
+      });
 
       // Fetch teachers
       const teachersData = await teachersAPI.getAll();
@@ -101,6 +127,67 @@ const StudentDashboard: React.FC = () => {
 
   const getPriceDisplay = (subjectId: string) => {
     return getPriceForSubjectAndGrade(subjectId, student?.gradeLevel);
+  };
+
+  const handleUpdateSettings = async () => {
+    try {
+      await authAPI.updateProfile({
+        name: settingsForm.name,
+        email: settingsForm.email,
+        phoneNumber: settingsForm.phoneNumber
+      });
+      
+      if (settingsForm.gradeLevel) {
+        await studentsAPI.updateProfile({
+          gradeLevel: settingsForm.gradeLevel
+        });
+      }
+      
+      setStudent({...student, ...settingsForm});
+      alert('Settings updated successfully!');
+    } catch (err: any) {
+      alert('Failed to update settings: ' + err.message);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('New passwords do not match!');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      alert('Password must be at least 6 characters long!');
+      return;
+    }
+    try {
+      await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setIsChangingPassword(false);
+      alert('Password changed successfully!');
+    } catch (err: any) {
+      alert('Failed to change password: ' + err.message);
+    }
+  };
+
+  const handleProfilePictureUpload = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const result = await uploadAPI.uploadProfilePicture?.(formData) || { url: URL.createObjectURL(file) };
+      
+      await authAPI.updateProfile({
+        profilePicture: result.url || URL.createObjectURL(file)
+      });
+      
+      setStudent({...student, profilePicture: result.url});
+      setSettingsForm({...settingsForm, profilePicture: result.url});
+      alert('Profile picture updated!');
+    } catch (err: any) {
+      alert('Failed to upload profile picture: ' + err.message);
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   const handleBookClass = async () => {
@@ -460,6 +547,229 @@ const StudentDashboard: React.FC = () => {
     </div>
   );
 
+  const renderSettings = () => (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Profile Picture */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Profile Picture</h3>
+          <div className="flex flex-col items-center">
+            <img 
+              src={settingsForm.profilePicture || '/default-avatar.png'} 
+              alt="Profile"
+              className="w-32 h-32 rounded-full object-cover border-4 border-[#f5a623] mb-4"
+            />
+            <label className="btn-primary py-2 px-6 flex items-center space-x-2 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>{uploadingFile ? 'Uploading...' : 'Change Picture'}</span>
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*"
+                onChange={(e) => e.target.files?.[0] && handleProfilePictureUpload(e.target.files[0])}
+                disabled={uploadingFile}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Personal Information */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Personal Information</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <UserIcon className="w-4 h-4" />
+                <span>Full Name</span>
+              </label>
+              <input 
+                type="text" 
+                className="form-input"
+                value={settingsForm.name}
+                onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <Mail className="w-4 h-4" />
+                <span>Email Address</span>
+              </label>
+              <input 
+                type="email" 
+                className="form-input"
+                value={settingsForm.email}
+                onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <Phone className="w-4 h-4" />
+                <span>Phone Number</span>
+              </label>
+              <input 
+                type="tel" 
+                className="form-input"
+                value={settingsForm.phoneNumber}
+                onChange={(e) => setSettingsForm({...settingsForm, phoneNumber: e.target.value})}
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
+            <button 
+              onClick={handleUpdateSettings}
+              className="btn-primary w-full mt-6"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Grade Level & Password */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Grade Level */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Education Details</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="form-label">Current Grade/Level</label>
+              <select 
+                className="form-input"
+                value={settingsForm.gradeLevel}
+                onChange={(e) => setSettingsForm({...settingsForm, gradeLevel: e.target.value})}
+              >
+                <option value="">Select Grade Level</option>
+                <option value="Grade 1-5">Primary (Grade 1-5)</option>
+                <option value="Grade 6-8">Middle (Grade 6-8)</option>
+                <option value="Grade 9-10">Secondary (Grade 9-10)</option>
+                <option value="O-Level">O-Level</option>
+                <option value="A-Level">A-Level</option>
+                <option value="University/College">University/College</option>
+              </select>
+            </div>
+            <button 
+              onClick={handleUpdateSettings}
+              className="btn-primary w-full"
+            >
+              Update Grade
+            </button>
+          </div>
+        </div>
+
+        {/* Password & Security */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Password & Security</h3>
+            <button 
+              onClick={() => setIsChangingPassword(!isChangingPassword)}
+              className="text-[#f5a623] text-sm hover:underline"
+            >
+              {isChangingPassword ? 'Cancel' : 'Change Password'}
+            </button>
+          </div>
+
+          {isChangingPassword ? (
+            <div className="space-y-4">
+              <div>
+                <label className="form-label">Current Password</label>
+                <div className="relative">
+                  <input 
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    className="form-input pr-10"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">New Password</label>
+                <div className="relative">
+                  <input 
+                    type={showNewPassword ? 'text' : 'password'}
+                    className="form-input pr-10"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Confirm Password</label>
+                <div className="relative">
+                  <input 
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    className="form-input pr-10"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  Password must be at least 6 characters long.
+                </p>
+              </div>
+
+              <button 
+                onClick={handleChangePassword}
+                className="btn-primary w-full"
+              >
+                Update Password
+              </button>
+            </div>
+          ) : (
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-sm text-green-700">
+                ✓ Your password is secure. Change it periodically for better security.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Account Information */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Account Information</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center py-3 border-b">
+            <span className="text-gray-600">Account Status</span>
+            <span className="badge badge-approved">Active</span>
+          </div>
+          <div className="flex justify-between items-center py-3 border-b">
+            <span className="text-gray-600">Member Since</span>
+            <span className="text-gray-900">{student?.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A'}</span>
+          </div>
+          <div className="flex justify-between items-center py-3">
+            <span className="text-gray-600">Account ID</span>
+            <span className="text-gray-900 font-mono text-sm">{student?.id}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="dashboard-layout">
       {/* Sidebar */}
@@ -533,11 +843,7 @@ const StudentDashboard: React.FC = () => {
             </div>
           )}
           {activeTab === 'payments' && renderPayments()}
-          {activeTab === 'settings' && (
-            <div className="text-center py-12 text-gray-500">
-              Settings coming soon...
-            </div>
-          )}
+          {activeTab === 'settings' && renderSettings()}
         </div>
       </main>
 

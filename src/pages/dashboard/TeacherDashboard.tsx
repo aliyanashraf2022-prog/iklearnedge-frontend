@@ -3,16 +3,21 @@ import {
   LayoutDashboard, Calendar, Users, FileText, 
   Settings, LogOut, Video, Clock, DollarSign,
   CheckCircle, XCircle, Edit, Upload, Bell,
-  ChevronRight, Star, Info, Loader2
+  ChevronRight, Star, Info, Loader2, Eye, EyeOff,
+  Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, subjectsAPI, uploadAPI } from '@/services/api';
+import { teachersAPI, subjectsAPI, uploadAPI, authAPI } from '@/services/api';
 
 const TeacherDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Data states
   const [teacher, setTeacher] = useState<any>(null);
@@ -25,6 +30,17 @@ const TeacherDashboard: React.FC = () => {
   // Form states
   const [bio, setBio] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    profilePicture: ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -49,6 +65,12 @@ const TeacherDashboard: React.FC = () => {
       const teacherData = await teachersAPI.getProfile();
       setTeacher(teacherData.teacher);
       setBio(teacherData.teacher?.bio || '');
+      setSettingsForm({
+        name: teacherData.teacher?.name || '',
+        email: teacherData.teacher?.email || '',
+        phoneNumber: teacherData.teacher?.phoneNumber || '',
+        profilePicture: teacherData.teacher?.profilePicture || ''
+      });
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAll();
@@ -109,6 +131,60 @@ const TeacherDashboard: React.FC = () => {
     // Schedule update logic will be implemented
     alert('Schedule updated!');
     setIsEditingSchedule(false);
+  };
+
+  const handleUpdateSettings = async () => {
+    try {
+      await authAPI.updateProfile({
+        name: settingsForm.name,
+        email: settingsForm.email,
+        phoneNumber: settingsForm.phoneNumber
+      });
+      setTeacher({...teacher, ...settingsForm});
+      alert('Settings updated successfully!');
+    } catch (err: any) {
+      alert('Failed to update settings: ' + err.message);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('New passwords do not match!');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      alert('Password must be at least 6 characters long!');
+      return;
+    }
+    try {
+      await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setIsChangingPassword(false);
+      alert('Password changed successfully!');
+    } catch (err: any) {
+      alert('Failed to change password: ' + err.message);
+    }
+  };
+
+  const handleProfilePictureUpload = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const result = await uploadAPI.uploadProfilePicture?.(formData) || { url: URL.createObjectURL(file) };
+      
+      await authAPI.updateProfile({
+        profilePicture: result.url || URL.createObjectURL(file)
+      });
+      
+      setTeacher({...teacher, profilePicture: result.url});
+      setSettingsForm({...settingsForm, profilePicture: result.url});
+      alert('Profile picture updated!');
+    } catch (err: any) {
+      alert('Failed to upload profile picture: ' + err.message);
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   if (isLoading) {
@@ -279,18 +355,6 @@ const TeacherDashboard: React.FC = () => {
                 <Star key={star} className="w-5 h-5 text-yellow-400 fill-yellow-400" />
               ))}
               <span className="ml-2 text-gray-600">(4.9)</span>
-            </div>
-          </div>
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex items-start space-x-2">
-              <Info className="w-5 h-5 text-blue-500 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-blue-700">Pricing Information</p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Class prices are set by the admin based on subject and grade level. 
-                  You'll see the rate for each booking in your class details.
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -517,7 +581,198 @@ const TeacherDashboard: React.FC = () => {
     </div>
   );
 
-  return (
+  const renderSettings = () => (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Profile Picture */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Profile Picture</h3>
+          <div className="flex flex-col items-center">
+            <img 
+              src={settingsForm.profilePicture || '/default-avatar.png'} 
+              alt="Profile"
+              className="w-32 h-32 rounded-full object-cover border-4 border-[#f5a623] mb-4"
+            />
+            <label className="btn-primary py-2 px-6 flex items-center space-x-2 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>{uploadingFile ? 'Uploading...' : 'Change Picture'}</span>
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*"
+                onChange={(e) => e.target.files?.[0] && handleProfilePictureUpload(e.target.files[0])}
+                disabled={uploadingFile}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Personal Information */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Personal Information</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <UserIcon className="w-4 h-4" />
+                <span>Full Name</span>
+              </label>
+              <input 
+                type="text" 
+                className="form-input"
+                value={settingsForm.name}
+                onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <Mail className="w-4 h-4" />
+                <span>Email Address</span>
+              </label>
+              <input 
+                type="email" 
+                className="form-input"
+                value={settingsForm.email}
+                onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="form-label flex items-center space-x-2">
+                <Phone className="w-4 h-4" />
+                <span>Phone Number</span>
+              </label>
+              <input 
+                type="tel" 
+                className="form-input"
+                value={settingsForm.phoneNumber}
+                onChange={(e) => setSettingsForm({...settingsForm, phoneNumber: e.target.value})}
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
+            <button 
+              onClick={handleUpdateSettings}
+              className="btn-primary w-full mt-6"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Password & Security */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Password & Security</h3>
+          <button 
+            onClick={() => setIsChangingPassword(!isChangingPassword)}
+            className="text-[#f5a623] text-sm hover:underline"
+          >
+            {isChangingPassword ? 'Cancel' : 'Change Password'}
+          </button>
+        </div>
+
+        {isChangingPassword ? (
+          <div className="space-y-4">
+            <div>
+              <label className="form-label">Current Password</label>
+              <div className="relative">
+                <input 
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  className="form-input pr-10"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                >
+                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">New Password</label>
+              <div className="relative">
+                <input 
+                  type={showNewPassword ? 'text' : 'password'}
+                  className="form-input pr-10"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">Confirm Password</label>
+              <div className="relative">
+                <input 
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="form-input pr-10"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-blue-700">
+                Password must be at least 6 characters long.
+              </p>
+            </div>
+
+            <button 
+              onClick={handleChangePassword}
+              className="btn-primary w-full"
+            >
+              Update Password
+            </button>
+          </div>
+        ) : (
+          <div className="bg-green-50 p-4 rounded-lg">
+            <p className="text-sm text-green-700">
+              ✓ Your password is secure. Change it periodically for better security.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Account Information */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Account Information</h3>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center py-3 border-b">
+            <span className="text-gray-600">Account Status</span>
+            <span className={`badge ${teacher?.verificationStatus === 'approved' ? 'badge-approved' : 'badge-pending'}`}>
+              {teacher?.verificationStatus === 'approved' ? 'Verified' : 'Pending'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-3 border-b">
+            <span className="text-gray-600">Member Since</span>
+            <span className="text-gray-900">{teacher?.createdAt ? new Date(teacher.createdAt).toLocaleDateString() : 'N/A'}</span>
+          </div>
+          <div className="flex justify-between items-center py-3">
+            <span className="text-gray-600">Account ID</span>
+            <span className="text-gray-900 font-mono text-sm">{teacher?.id}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
     <div className="dashboard-layout">
       {/* Sidebar */}
       <aside className="dashboard-sidebar">
@@ -586,11 +841,7 @@ const TeacherDashboard: React.FC = () => {
           {activeTab === 'schedule' && renderSchedule()}
           {activeTab === 'students' && renderStudents()}
           {activeTab === 'documents' && renderDocuments()}
-          {activeTab === 'settings' && (
-            <div className="text-center py-12 text-gray-500">
-              Settings coming soon...
-            </div>
-          )}
+          {activeTab === 'settings' && renderSettings()}
         </div>
       </main>
 
@@ -613,18 +864,6 @@ const TeacherDashboard: React.FC = () => {
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Tell students about your teaching experience..."
                 />
-              </div>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <Info className="w-5 h-5 text-blue-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-700">Note about Pricing</p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Class prices are set by the admin based on subject and grade level. 
-                      You cannot change your hourly rate.
-                    </p>
-                  </div>
-                </div>
               </div>
               <button type="submit" className="btn-primary w-full">
                 Save Changes
