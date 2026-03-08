@@ -180,6 +180,9 @@ const Footer: React.FC = () => {
           <p className="text-white/50 text-sm">
             © Copyright {new Date().getFullYear()} IkLearnEdge.com. All rights reserved.
           </p>
+          <div className="mt-4">
+            <span className="font-bold text-2xl" style={{ color: '#ff0000' }}>IK learn edge</span>
+          </div>
         </div>
       </div>
     </footer>
