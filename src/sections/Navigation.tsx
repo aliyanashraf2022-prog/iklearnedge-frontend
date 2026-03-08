@@ -198,14 +198,14 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
       </div>
 
       {/* Mobile Menu */}
-                  <a href="/about-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">About Us</a>
-                  <a href="/contact-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Contact Us</a>
-                  <a href="/faqs" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">FAQs</a>
-                  <a href="/terms" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Terms and Conditions</a>
-                  <a href="/privacy" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Privacy Policy</a>
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white shadow-lg animate-slide-up">
           <div className="px-4 py-4 space-y-3">
+            <a href="/about-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">About Us</a>
+            <a href="/contact-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Contact Us</a>
+            <a href="/faqs" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">FAQs</a>
+            <a href="/terms" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Terms and Conditions</a>
+            <a href="/privacy" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Privacy Policy</a>
             <button 
               onClick={() => scrollToSection('hero')}
               className="block w-full text-left py-2 text-[#4a4a4a] font-medium"
@@ -236,7 +236,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
             >
               Our Team
             </button>
-            
             {!user && (
               <div className="pt-4 border-t space-y-3">
                 <button 
