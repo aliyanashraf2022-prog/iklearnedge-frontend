@@ -127,7 +127,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <a 
             <button
               className="p-2 rounded-full bg-[#f5a623] text-white hover:bg-[#e09513] transition-colors"
               onClick={() => setShowContact(!showContact)}
