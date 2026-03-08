@@ -5,6 +5,7 @@ import Hero from '@/sections/Hero';
 import HowItWorks from '@/sections/HowItWorks';
 import Testimonials from '@/sections/Testimonials';
 import Subjects from '@/sections/Subjects';
+import DirectorIntro from '@/sections/DirectorIntro';
 import Footer from '@/sections/Footer';
 import AuthModal from '@/components/AuthModal';
 import AdminDashboard from '@/pages/dashboard/AdminDashboard';
@@ -25,6 +26,12 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
       <HowItWorks />
       <Testimonials />
       <Subjects />
+      <DirectorIntro 
+        directorName="Rubina Altaf"
+        directorTitle="Director"
+        directorIntro="25+ Years of Experiance in the Field of education"
+        directorImage="/director-image.jpg"
+      />
       <Footer />
     </div>
   );
