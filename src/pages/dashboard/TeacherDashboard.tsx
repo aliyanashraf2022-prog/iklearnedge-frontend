@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Calendar, Users, FileText, 
   Settings, LogOut, Video, Clock, DollarSign,
   CheckCircle, XCircle, Edit, Upload, Bell,
-  ChevronRight, Star, Info, Loader2, Eye, EyeOff,
+  ChevronRight, Star, Loader2, Eye, EyeOff,
   Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -171,7 +171,7 @@ const TeacherDashboard: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const result = await uploadAPI.uploadProfilePicture?.(formData) || { url: URL.createObjectURL(file) };
+      const result = await uploadAPI.uploadProfilePicture?.(formData as any) || { url: URL.createObjectURL(file) };
       
       await authAPI.updateProfile({
         profilePicture: result.url || URL.createObjectURL(file)
@@ -773,6 +773,8 @@ const TeacherDashboard: React.FC = () => {
       </div>
     </div>
   );
+
+  return (
     <div className="dashboard-layout">
       {/* Sidebar */}
       <aside className="dashboard-sidebar">

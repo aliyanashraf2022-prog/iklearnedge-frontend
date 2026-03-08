@@ -174,7 +174,7 @@ const StudentDashboard: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const result = await uploadAPI.uploadProfilePicture?.(formData) || { url: URL.createObjectURL(file) };
+      const result = await uploadAPI.uploadProfilePicture?.(formData as any) || { url: URL.createObjectURL(file) };
       
       await authAPI.updateProfile({
         profilePicture: result.url || URL.createObjectURL(file)

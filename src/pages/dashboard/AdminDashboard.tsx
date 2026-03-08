@@ -53,7 +53,6 @@ const AdminDashboard: React.FC = () => {
     setError(null);
     try {
       // ✅ FIX: Added timeout handling for stats to prevent 30s delay
-      let statsData = null;
       try {
         const stats = await adminAPI.getStats();
         setStats(stats.data || stats);
