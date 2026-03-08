@@ -450,8 +450,9 @@ const AdminDashboard: React.FC = () => {
               className="pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-[#f5a623]"
             />
           </div>
-          <button className="p-2 border rounded-lg hover:bg-gray-50">
+          <button className="p-2 border rounded-lg hover:bg-gray-50" title="Filter Teachers">
             <Filter className="w-4 h-4 text-gray-600" />
+            <span className="sr-only">Filter</span>
           </button>
         </div>
       </div>
@@ -667,9 +668,10 @@ const AdminDashboard: React.FC = () => {
             {sidebarItems.find(i => i.id === activeTab)?.label}
           </h1>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 hover:bg-gray-100 rounded-full">
+            <button className="relative p-2 hover:bg-gray-100 rounded-full" title="Notifications">
               <Bell className="w-5 h-5 text-gray-600" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+              <span className="sr-only">Notifications</span>
             </button>
           </div>
         </header>
@@ -704,8 +706,9 @@ const AdminDashboard: React.FC = () => {
           <div className="modal-content max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Add New Subject</h3>
-              <button onClick={() => setIsAddingSubject(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setIsAddingSubject(false)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Add Subject Modal">
                 <XCircle className="w-5 h-5 text-gray-500" />
+                <span className="sr-only">Close</span>
               </button>
             </div>
             <div className="space-y-4">
@@ -739,8 +742,9 @@ const AdminDashboard: React.FC = () => {
                         <input 
                           type="number"
                           min="5"
-                          placeholder="20"
+                          placeholder="Enter price"
                           className="w-20 form-input py-1 text-sm"
+                          aria-label={`Price for ${grade}`}
                           onChange={(e) => setNewSubjectPrices({...newSubjectPrices, [grade]: Number(e.target.value)})}
                         />
                         <span className="text-sm text-gray-500">/hr</span>
@@ -749,7 +753,7 @@ const AdminDashboard: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <button onClick={handleAddSubject} className="btn-primary w-full">
+              <button onClick={handleAddSubject} className="btn-primary w-full" title="Add Subject">
                 Add Subject
               </button>
             </div>
@@ -765,8 +769,9 @@ const AdminDashboard: React.FC = () => {
               <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
                 Edit Pricing: {selectedSubject.name}
               </h3>
-              <button onClick={() => setSelectedSubject(null)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setSelectedSubject(null)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Edit Pricing Modal">
                 <XCircle className="w-5 h-5 text-gray-500" />
+                <span className="sr-only">Close</span>
               </button>
             </div>
             <div className="space-y-4">
@@ -780,12 +785,14 @@ const AdminDashboard: React.FC = () => {
                       min="5"
                       defaultValue={tier.pricePerHour}
                       className="w-20 form-input py-1 text-sm"
+                      aria-label={`Edit price for ${tier.gradeLevel}`}
+                      placeholder="Enter price"
                     />
                     <span className="text-sm text-gray-500">/hr</span>
                   </div>
                 </div>
               ))}
-              <button onClick={handleUpdatePricing} className="btn-primary w-full">
+              <button onClick={handleUpdatePricing} className="btn-primary w-full" title="Update Pricing">
                 Update Pricing
               </button>
             </div>
@@ -801,8 +808,9 @@ const AdminDashboard: React.FC = () => {
               <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
                 Teacher Verification
               </h3>
-              <button onClick={() => setSelectedTeacher(null)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setSelectedTeacher(null)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Teacher Verification Modal">
                 <XCircle className="w-5 h-5 text-gray-500" />
+                <span className="sr-only">Close</span>
               </button>
             </div>
 

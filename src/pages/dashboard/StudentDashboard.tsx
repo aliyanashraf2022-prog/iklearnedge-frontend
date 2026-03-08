@@ -256,10 +256,13 @@ const StudentDashboard: React.FC = () => {
               className="form-input pl-10 w-full"
             />
           </div>
+          <label htmlFor="subject-select" className="sr-only">Select Subject</label>
           <select
+            id="subject-select"
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
             className="form-input md:w-56"
+            title="Select Subject"
           >
             <option value="">All Subjects</option>
             {subjects.filter((s: any) => s.isActive).map((s: any) => (
@@ -326,7 +329,7 @@ const StudentDashboard: React.FC = () => {
                     <span className="text-sm text-gray-500">/hour</span>
                     <p className="text-xs text-gray-400">for {student?.gradeLevel}</p>
                   </div>
-                  <button className="btn-primary text-sm py-2 px-4">
+                  <button className="btn-primary text-sm py-2 px-4" title="Book Now">
                     Book Now
                   </button>
                 </div>
@@ -500,6 +503,7 @@ const StudentDashboard: React.FC = () => {
                       setShowPaymentModal(true); 
                     }}
                     className="btn-primary text-sm py-2 px-4"
+                    title="Upload Payment"
                   >
                     Upload Payment
                   </button>
@@ -632,10 +636,13 @@ const StudentDashboard: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="form-label">Current Grade/Level</label>
+              <label htmlFor="grade-select" className="sr-only">Select Grade Level</label>
               <select 
+                id="grade-select"
                 className="form-input"
                 value={settingsForm.gradeLevel}
                 onChange={(e) => setSettingsForm({...settingsForm, gradeLevel: e.target.value})}
+                title="Select Grade Level"
               >
                 <option value="">Select Grade Level</option>
                 <option value="Grade 1-5">Primary (Grade 1-5)</option>

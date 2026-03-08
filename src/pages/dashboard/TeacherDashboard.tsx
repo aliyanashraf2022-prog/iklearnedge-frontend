@@ -280,9 +280,11 @@ const TeacherDashboard: React.FC = () => {
           <button 
             onClick={() => setActiveTab('schedule')}
             className="text-[#f5a623] text-sm hover:underline flex items-center space-x-1"
+            title="View All Schedule"
           >
             <span>View All</span>
             <ChevronRight className="w-4 h-4" />
+            <span className="sr-only">View All Schedule</span>
           </button>
         </div>
         
@@ -327,9 +329,11 @@ const TeacherDashboard: React.FC = () => {
           <button 
             onClick={() => setIsEditingProfile(true)}
             className="text-[#f5a623] text-sm hover:underline flex items-center space-x-1"
+            title="Edit Profile"
           >
             <Edit className="w-4 h-4" />
             <span>Edit</span>
+            <span className="sr-only">Edit Profile</span>
           </button>
         </div>
         
@@ -369,9 +373,11 @@ const TeacherDashboard: React.FC = () => {
         <button 
           onClick={() => setIsEditingSchedule(true)}
           className="btn-primary flex items-center space-x-2"
+          title="Edit Schedule"
         >
           <Edit className="w-4 h-4" />
           <span>Edit Schedule</span>
+          <span className="sr-only">Edit Schedule</span>
         </button>
       </div>
 
@@ -500,8 +506,8 @@ const TeacherDashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 flex space-x-2">
-            <button className="flex-1 btn-secondary text-sm py-2">View</button>
-            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer">
+            <button className="flex-1 btn-secondary text-sm py-2" title="View Document">View</button>
+            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer" title="Update Degree Document">
               <Upload className="w-4 h-4" />
               <span>{uploadingFile ? 'Uploading...' : 'Update'}</span>
               <input 
@@ -510,6 +516,7 @@ const TeacherDashboard: React.FC = () => {
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'degree')}
                 disabled={uploadingFile}
+                aria-label="Upload Degree Document"
               />
             </label>
           </div>
@@ -534,8 +541,8 @@ const TeacherDashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 flex space-x-2">
-            <button className="flex-1 btn-secondary text-sm py-2">View</button>
-            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer">
+            <button className="flex-1 btn-secondary text-sm py-2" title="View Document">View</button>
+            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer" title="Update Identity Document">
               <Upload className="w-4 h-4" />
               <span>{uploadingFile ? 'Uploading...' : 'Update'}</span>
               <input 
@@ -544,6 +551,7 @@ const TeacherDashboard: React.FC = () => {
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'identity')}
                 disabled={uploadingFile}
+                aria-label="Upload Identity Document"
               />
             </label>
           </div>
@@ -565,7 +573,7 @@ const TeacherDashboard: React.FC = () => {
               </div>
             </div>
           ))}
-          <label className="w-full btn-primary text-sm py-2 flex items-center justify-center space-x-1 mt-4 cursor-pointer">
+          <label className="w-full btn-primary text-sm py-2 flex items-center justify-center space-x-1 mt-4 cursor-pointer" title="Add Teaching Certificate">
             <Upload className="w-4 h-4" />
             <span>{uploadingFile ? 'Uploading...' : 'Add Certificate'}</span>
             <input 
@@ -574,6 +582,7 @@ const TeacherDashboard: React.FC = () => {
               accept=".pdf,.jpg,.jpeg,.png"
               onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'certificate')}
               disabled={uploadingFile}
+              aria-label="Upload Teaching Certificate"
             />
           </label>
         </div>
