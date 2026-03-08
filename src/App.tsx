@@ -30,7 +30,7 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
         directorName="Rubina Altaf"
         directorTitle="Director"
         directorIntro="25+ Years of Experiance in the Field of education"
-        directorImage="/director-image.jpg"
+        directorImage="/director-image.png"
       />
       <Footer />
     </div>
