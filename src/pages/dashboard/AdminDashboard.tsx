@@ -21,7 +21,6 @@ const AdminDashboard: React.FC = () => {
   
   // Data states
   const [stats, setStats] = useState<any>(null);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [pendingVerifications, setPendingVerifications] = useState<any[]>([]); // ✅ FIX: Changed to state
@@ -75,11 +74,11 @@ const AdminDashboard: React.FC = () => {
 
       // Fetch teachers
       const teachersData = await teachersAPI.getAllAdmin();
-      setTeachers(teachersData.teachers || []);
+      const allTeachers = teachersData.teachers || [];
 
-      // ✅ FIX: Call correct endpoint for pending teacher verifications
-      const verificationsRes = await api.get('/admin/verifications/pending');
-      setPendingVerifications(verificationsRes.data.data || []);
+      setPendingVerifications(allTeachers.filter((t: any) => 
+        (t.verificationStatus || t.verification_status) === 'pending'
+      ));
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAllAdmin();
@@ -812,12 +811,12 @@ const AdminDashboard: React.FC = () => {
             <div className="space-y-6">
               <div className="flex items-center space-x-4">
                 <img 
-                  src={selectedTeacher.profilePicture || selectedTeacher.profile_picture} 
-                  alt={selectedTeacher.name || selectedTeacher.full_name} 
+                  src={selectedTeacher.profilePicture} 
+                  alt={selectedTeacher.name} 
                   className="w-20 h-20 rounded-full object-cover"
                 />
                 <div>
-                  <h4 className="text-lg font-bold text-[#4a4a4a]">{selectedTeacher.name || selectedTeacher.full_name}</h4>
+                  <h4 className="text-lg font-bold text-[#4a4a4a]">{selectedTeacher.name}</h4>
                   <p className="text-gray-500">{selectedTeacher.email}</p>
                 </div>
               </div>
@@ -847,7 +846,7 @@ const AdminDashboard: React.FC = () => {
                     <FileText className="w-4 h-4" />
                     <span>Highest Degree</span>
                   </h5>
-                  <p className="text-sm text-gray-600">{(selectedTeacher.highestDegree || selectedTeacher.qualification || {}).fileName || 'Document uploaded'}</p>
+                  <p className="text-sm text-gray-600">{(selectedTeacher.highestDegree || {}).fileName || 'Document uploaded'}</p>
                   <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
                 </div>
 
@@ -856,12 +855,12 @@ const AdminDashboard: React.FC = () => {
                     <FileText className="w-4 h-4" />
                     <span>ID Document</span>
                   </h5>
-                  <p className="text-sm text-gray-600">{(selectedTeacher.identityDocument || selectedTeacher.id_document || {}).fileName || 'Document uploaded'}</p>
+                  <p className="text-sm text-gray-600">{(selectedTeacher.identityDocument || {}).fileName || 'Document uploaded'}</p>
                   <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
                 </div>
               </div>
 
-              {(selectedTeacher.verification_status === 'pending') && (
+              {(selectedTeacher.verificationStatus === 'pending') && (
                 <div className="flex space-x-4">
                   <button 
                     onClick={() => handleApproveTeacher(selectedTeacher.id)}

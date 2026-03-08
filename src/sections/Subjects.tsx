@@ -10,48 +10,56 @@ const subjects = [
     name: 'English',
     description: 'Master English language skills with expert tutors.',
     image: '/subject-english.jpg',
+    tutorCount: 15,
   },
   {
     id: 2,
     name: 'Chemistry',
     description: 'Learn Chemistry from qualified professionals.',
     image: '/subject-chemistry.jpg',
+    tutorCount: 12,
   },
   {
     id: 3,
     name: 'Physics',
     description: 'Understand the laws of the universe.',
     image: '/subject-physics.jpg',
+    tutorCount: 10,
   },
   {
     id: 4,
     name: 'Science',
     description: 'Comprehensive science tutoring for all levels.',
     image: '/subject-science.jpg',
+    tutorCount: 18,
   },
   {
     id: 5,
     name: 'Math',
     description: 'From basic arithmetic to advanced calculus.',
     image: '/subject-math.jpg',
+    tutorCount: 20,
   },
   {
     id: 6,
     name: 'IELTS',
     description: 'Prepare for your IELTS exam with certified trainers.',
     image: '/subject-ielts.jpg',
+    tutorCount: 8,
   },
   {
     id: 7,
     name: 'SAT',
     description: 'Comprehensive SAT preparation courses.',
     image: '/subject-sat.jpg',
+    tutorCount: 6,
   },
   {
     id: 8,
     name: 'Accounting',
     description: 'From begning to advance calculations.',
     image: '/subject-accounting.jpg',
+    tutorCount: 9,
   }
 ];
 
