@@ -12,6 +12,7 @@ import AdminDashboard from '@/pages/dashboard/AdminDashboard';
 import TeacherDashboard from '@/pages/dashboard/TeacherDashboard';
 import StudentDashboard from '@/pages/dashboard/StudentDashboard';
 import OurTeam from '@/pages/our-team';
+import ContactUs from '@/pages/contact-us';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import './App.css';
 
@@ -139,6 +140,7 @@ const AppContent: React.FC = () => {
           } 
         />
         <Route path="/our-team" element={<OurTeam />} />
+        <Route path="/contact-us" element={<ContactUs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
