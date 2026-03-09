@@ -6,13 +6,13 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 const footerLinks = [
-  { name: 'About Us', href: '#' },
-  { name: 'Contact Us', href: '#' },
-  { name: 'Pricing', href: '#' },
-  { name: 'FAQs', href: '#' },
-  { name: 'Blog', href: '#' },
-  { name: 'Terms and Conditions', href: '#' },
-  { name: 'Privacy Policy', href: '#' }
+  { name: 'About Us', href: '/about-us' },
+  { name: 'Contact Us', href: '/contact-us' },
+  { name: 'FAQs', href: '/faqs' },
+  { name: 'Terms and Conditions', href: '/terms' },
+  { name: 'Privacy Policy', href: '/privacy' },
+  { name: 'Pricing', href: '/pricing' },
+  { name: 'Blog', href: '/blog' }
 ];
 
 const Footer: React.FC = () => {

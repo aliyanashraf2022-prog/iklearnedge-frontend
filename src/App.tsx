@@ -1,3 +1,33 @@
+                <Route path="/about-us" element={
+                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+                    {React.createElement(React.lazy(() => import('./pages/AboutUsPage')))}
+                  </React.Suspense>
+                } />
+                <Route path="/contact-us" element={
+                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+                    {React.createElement(React.lazy(() => import('./pages/ContactUsPage')))}
+                  </React.Suspense>
+                } />
+                <Route path="/faqs" element={
+                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+                    {React.createElement(React.lazy(() => import('./pages/FAQsPage')))}
+                  </React.Suspense>
+                } />
+                <Route path="/terms" element={
+                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+                    {React.createElement(React.lazy(() => import('./pages/TermsPage')))}
+                  </React.Suspense>
+                } />
+                <Route path="/privacy" element={
+                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+                    {React.createElement(React.lazy(() => import('./pages/PrivacyPage')))}
+                  </React.Suspense>
+                } />
+        <Route path="/blog" element={
+          <React.Suspense fallback={<div className="py-8 text-center">Loading blog...</div>}>
+            {React.createElement(React.lazy(() => import('./pages/BlogPage')))}
+          </React.Suspense>
+        } />
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navigation from '@/sections/Navigation';
@@ -21,13 +51,20 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
   onLoginClick, 
   onRegisterClick 
 }) => {
+  // ...existing code...
+  // Import TopTeachers
+  const TopTeachers = React.lazy(() => import('./sections/TopTeachers'));
   return (
     <div className="min-h-screen bg-white">
       <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
       <Hero onGetStarted={onRegisterClick} />
       <HowItWorks />
       <Testimonials />
-      <Subjects />
+      <Subjects onLoginClick={onLoginClick} />
+      {/* Show top teachers section */}
+      <React.Suspense fallback={<div className="py-8 text-center">Loading top teachers...</div>}>
+        <TopTeachers />
+      </React.Suspense>
       <DirectorIntro 
         directorName="Rubina Altaf"
         directorTitle="Director"
@@ -81,6 +118,7 @@ const AppContent: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const { isAuthenticated } = useAuth();
 
+  // Always open modal in correct mode
   const openLogin = () => {
     setAuthMode('login');
     setIsAuthModalOpen(true);
@@ -118,7 +156,7 @@ const AppContent: React.FC = () => {
         <Route 
           path="/admin" 
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={["admin"]}>
               <AdminDashboard />
             </ProtectedRoute>
           } 
@@ -126,7 +164,7 @@ const AppContent: React.FC = () => {
         <Route 
           path="/teacher" 
           element={
-            <ProtectedRoute allowedRoles={['teacher']}>
+            <ProtectedRoute allowedRoles={["teacher"]}>
               <TeacherDashboard />
             </ProtectedRoute>
           } 
@@ -134,16 +172,22 @@ const AppContent: React.FC = () => {
         <Route 
           path="/student" 
           element={
-            <ProtectedRoute allowedRoles={['student']}>
+            <ProtectedRoute allowedRoles={["student"]}>
               <StudentDashboard />
             </ProtectedRoute>
           } 
         />
+        <Route path="/pricing" element={
+          <React.Suspense fallback={<div className="py-8 text-center">Loading pricing...</div>}>
+            {React.createElement(React.lazy(() => import('./pages/PricingPage')))}
+          </React.Suspense>
+        } />
         <Route path="/our-team" element={<OurTeam />} />
         <Route path="/contact-us" element={<ContactUs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
+      {/* AuthModal always receives correct mode */}
       <AuthModal 
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)}

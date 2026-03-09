@@ -14,13 +14,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   const [step, setStep] = useState(1);
   const [role, setRole] = useState<UserRole>('student');
   const { login, register } = useAuth();
-  
+
   // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [bio, setBio] = useState('');
+  const [description, setDescription] = useState(''); // Fix: add missing description state
   const [subjects, setSubjects] = useState<string[]>([]);
   const [hourlyRate, setHourlyRate] = useState('');
   const [isLoading, setIsLoading] = useState(false);

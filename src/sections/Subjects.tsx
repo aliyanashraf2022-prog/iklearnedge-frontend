@@ -63,7 +63,11 @@ const subjects = [
   }
 ];
 
-const Subjects: React.FC = () => {
+interface SubjectsProps {
+  onLoginClick: () => void;
+}
+
+const Subjects: React.FC<SubjectsProps> = ({ onLoginClick }) => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -147,6 +151,7 @@ const Subjects: React.FC = () => {
                 transform: 'translateZ(0)',
                 transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)'
               }}
+              onClick={onLoginClick}
             >
               {/* Image */}
               <div className="relative h-48 overflow-hidden">
@@ -180,7 +185,10 @@ const Subjects: React.FC = () => {
                     </span>
                   </div>
                   
-                  <button className="text-[#f5a623] text-sm font-medium hover:underline flex items-center space-x-1 group/btn">
+                  <button
+                    className="text-[#f5a623] text-sm font-medium hover:underline flex items-center space-x-1 group/btn"
+                    onClick={e => { e.stopPropagation(); onLoginClick(); }}
+                  >
                     <span>Explore</span>
                     <svg 
                       className="w-4 h-4 transform transition-transform group-hover/btn:translate-x-1" 

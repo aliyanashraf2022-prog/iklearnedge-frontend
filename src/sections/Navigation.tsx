@@ -55,6 +55,14 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
+                        <button
+                          onClick={() => window.location.href='/blog'}
+                          className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
+                            isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'
+                          }`}
+                        >
+                          Blog
+                        </button>
             <button 
               onClick={() => scrollToSection('hero')}
               className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
@@ -63,7 +71,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
             >
               Home
             </button>
-
             <button 
               onClick={() => window.location.href='/our-team'}
               className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
@@ -72,7 +79,14 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
             >
               Our Team
             </button>
-            
+            <button
+              onClick={() => window.location.href='/pricing'}
+              className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
+                isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'
+              }`}
+            >
+              Pricing
+            </button>
             {/* Subjects Dropdown */}
             <div 
               className="relative"
@@ -85,7 +99,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
                 <span>Subjects</span>
                 <ChevronDown className={`w-4 h-4 transition-transform ${isSubjectsOpen ? 'rotate-180' : ''}`} />
               </button>
-              
               {isSubjectsOpen && (
                 <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 animate-fade-in origin-top">
                   {subjects.map((subject, index) => (
@@ -101,29 +114,12 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
                 </div>
               )}
             </div>
-
-            <button 
-              onClick={() => scrollToSection('how-it-works')}
-              className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
-                isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'
-              }`}
-            >
-              Pricing
-            </button>
-            <button 
-              onClick={() => scrollToSection('testimonials')}
-              className={`text-sm font-medium transition-colors hover:text-[#f5a623] ${
-                isScrolled ? 'text-[#4a4a4a]' : 'text-[#4a4a4a]'
-              }`}
-            >
-              Blog
-            </button>
           </div>
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
             <button
-              className="btn-primary text-sm flex items-center space-x-2"
+              className="rounded-full bg-[#f5a623] text-white text-sm flex items-center space-x-2 px-4 py-2 shadow-lg hover:bg-[#e09513] transition-colors"
               onClick={() => setShowContact(!showContact)}
             >
               <Phone className="w-5 h-5 mr-2" />
@@ -141,7 +137,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
                 </div>
               </div>
             )}
-            
             {user ? (
               <div className="flex items-center space-x-3">
                 <span className="text-sm text-[#4a4a4a]">Welcome, {user.name}</span>
@@ -190,11 +185,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white shadow-lg animate-slide-up">
           <div className="px-4 py-4 space-y-3">
-            <a href="/about-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">About Us</a>
-            <a href="/contact-us" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Contact Us</a>
-            <a href="/faqs" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">FAQs</a>
-            <a href="/terms" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Terms and Conditions</a>
-            <a href="/privacy" className="block w-full text-left py-2 text-[#4a4a4a] font-medium">Privacy Policy</a>
             <button 
               onClick={() => scrollToSection('hero')}
               className="block w-full text-left py-2 text-[#4a4a4a] font-medium"
