@@ -255,7 +255,7 @@ const AdminDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">Total Revenue</p>
-              <p className="stat-value text-green-6us">${(stats?.totalRevenue || 0).toLocaleString()}</p>
+              <p className="stat-value text-green-6us">AED {(stats?.totalRevenue || 0).toLocaleString()}</p>
             </div>
             <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
               <DollarSign className="w-7 h-7 text-green-600" />
@@ -404,7 +404,7 @@ const AdminDashboard: React.FC = () => {
                   {subject.pricingTiers?.slice(0, 3).map((tier) => (
                     <div key={tier.id} className="flex justify-between text-sm">
                       <span className="text-gray-600">{tier.gradeLevel}</span>
-                      <span className="font-medium text-[#f5a623]">${tier.pricePerHour}/hr</span>
+                      <span className="font-medium text-[#f5a623]">AED {tier.pricePerHour}/hr</span>
                     </div>
                   ))}
                   {(subject.pricingTiers?.length || 0) > 3 && (
@@ -546,7 +546,7 @@ const AdminDashboard: React.FC = () => {
                 <td>{payment.teacherName || 'Unknown'}</td>
                 <td>
                   <div>
-                    <p className="font-medium">${payment.amount}</p>
+                    <p className="font-medium">AED {payment.amount}</p>
                   </div>
                 </td>
                 <td>
