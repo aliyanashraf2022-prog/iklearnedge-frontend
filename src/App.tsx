@@ -130,70 +130,99 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <>
-      <Routes>
-        <Route 
-          path="/" 
-          element={
-            isAuthenticated ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <LandingPage 
-                onLoginClick={openLogin} 
-                onRegisterClick={openRegister} 
-              />
-            )
-          } 
-        />
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute>
-              <DashboardRouter />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/admin" 
-          element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/teacher" 
-          element={
-            <ProtectedRoute allowedRoles={["teacher"]}>
-              <TeacherDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/student" 
-          element={
-            <ProtectedRoute allowedRoles={["student"]}>
-              <StudentDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route path="/pricing" element={
-          <React.Suspense fallback={<div className="py-8 text-center">Loading pricing...</div>}>
-            {React.createElement(React.lazy(() => import('./pages/PricingPage')))}
-          </React.Suspense>
-        } />
-        <Route path="/our-team" element={<OurTeam />} />
-        <Route path="/contact-us" element={<ContactUs />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route 
+            path="/" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <LandingPage 
+                  onLoginClick={openLogin} 
+                  onRegisterClick={openRegister} 
+                />
+              )
+            } 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <DashboardRouter />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/teacher" 
+            element={
+              <ProtectedRoute allowedRoles={["teacher"]}>
+                <TeacherDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student" 
+            element={
+              <ProtectedRoute allowedRoles={["student"]}>
+                <StudentDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/pricing" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading pricing...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/PricingPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/our-team" element={<OurTeam />} />
+          <Route path="/about-us" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/AboutUsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/contact-us" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/ContactUsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/faqs" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/FAQsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/terms" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/TermsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/privacy" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/PrivacyPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/blog" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading blog...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/BlogPage')))}
+            </React.Suspense>
+          } />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
 
-      {/* AuthModal always receives correct mode */}
-      <AuthModal 
-        isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)}
-        initialMode={authMode}
-      />
-    </>
+        {/* AuthModal always receives correct mode */}
+        <AuthModal 
+          isOpen={isAuthModalOpen} 
+          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authMode}
+        />
+      </>
   );
 };
 
