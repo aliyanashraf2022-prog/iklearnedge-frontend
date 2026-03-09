@@ -1,33 +1,3 @@
-                <Route path="/about-us" element={
-                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-                    {React.createElement(React.lazy(() => import('./pages/AboutUsPage')))}
-                  </React.Suspense>
-                } />
-                <Route path="/contact-us" element={
-                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-                    {React.createElement(React.lazy(() => import('./pages/ContactUsPage')))}
-                  </React.Suspense>
-                } />
-                <Route path="/faqs" element={
-                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-                    {React.createElement(React.lazy(() => import('./pages/FAQsPage')))}
-                  </React.Suspense>
-                } />
-                <Route path="/terms" element={
-                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-                    {React.createElement(React.lazy(() => import('./pages/TermsPage')))}
-                  </React.Suspense>
-                } />
-                <Route path="/privacy" element={
-                  <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-                    {React.createElement(React.lazy(() => import('./pages/PrivacyPage')))}
-                  </React.Suspense>
-                } />
-        <Route path="/blog" element={
-          <React.Suspense fallback={<div className="py-8 text-center">Loading blog...</div>}>
-            {React.createElement(React.lazy(() => import('./pages/BlogPage')))}
-          </React.Suspense>
-        } />
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navigation from '@/sections/Navigation';
