@@ -21,9 +21,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [bio, setBio] = useState('');
-  const [description, setDescription] = useState(''); // Fix: add missing description state
+  const [description, setDescription] = useState('');
   const [subjects, setSubjects] = useState<string[]>([]);
-  const [hourlyRate, setHourlyRate] = useState('');
+  const [profilePicture, setProfilePicture] = useState<File | null>(null);
+  const [degreeFile, setDegreeFile] = useState<File | null>(null);
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [cnicFile, setCnicFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -242,11 +245,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
 
       <div>
         <label className="form-label">Profile Picture</label>
-        <div className="file-upload-zone">
-          <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm text-gray-500">Upload your photo</p>
-          <p className="text-xs text-gray-400 mt-1">JPG, PNG up to 5MB</p>
-        </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => e.target.files?.[0] && setProfilePicture(e.target.files[0])}
+          className="form-input"
+        />
+        {profilePicture && <p className="text-xs text-green-600 mt-1">Selected: {profilePicture.name}</p>}
       </div>
 
       {error && (
@@ -363,51 +368,47 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
       </div>
 
       <div>
-        <label className="form-label">Hourly Rate (USD)</label>
-        <input
-          type="number"
-          value={hourlyRate}
-          onChange={(e) => setHourlyRate(e.target.value)}
-          className="form-input"
-          placeholder="e.g., 25"
-          min="5"
-          required
-        />
-      </div>
-
-      <div>
         <label className="form-label">Highest Degree (PDF/Image)</label>
-        <div className="file-upload-zone">
-          <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm text-gray-500">Upload your degree</p>
-          <p className="text-xs text-gray-400 mt-1">Required for verification</p>
-        </div>
+        <input
+          type="file"
+          accept="image/*,.pdf"
+          onChange={(e) => e.target.files?.[0] && setDegreeFile(e.target.files[0])}
+          className="form-input"
+        />
+        {degreeFile && <p className="text-xs text-green-600 mt-1">Selected: {degreeFile.name}</p>}
       </div>
 
       <div>
         <label className="form-label">Teaching Certificates</label>
-        <div className="file-upload-zone">
-          <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm text-gray-500">Upload certificates</p>
-          <p className="text-xs text-gray-400 mt-1">Optional but recommended</p>
-        </div>
+        <input
+          type="file"
+          accept="image/*,.pdf"
+          onChange={(e) => e.target.files?.[0] && setCertificateFile(e.target.files[0])}
+          className="form-input"
+        />
+        {certificateFile && <p className="text-xs text-green-600 mt-1">Selected: {certificateFile.name}</p>}
       </div>
 
       <div>
         <label className="form-label">CNIC/Passport Copy</label>
-        <div className="file-upload-zone">
-          <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm text-gray-500">Upload ID document</p>
-          <p className="text-xs text-gray-400 mt-1">Required for internal verification</p>
-        </div>
+        <input
+          type="file"
+          accept="image/*,.pdf"
+          onChange={(e) => e.target.files?.[0] && setCnicFile(e.target.files[0])}
+          className="form-input"
+        />
+        {cnicFile && <p className="text-xs text-green-600 mt-1">Selected: {cnicFile.name}</p>}
       </div>
 
       <div>
         <label className="form-label">Profile Picture</label>
-        <div className="file-upload-zone">
-          <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-sm text-gray-500">Upload your photo</p>
-        </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => e.target.files?.[0] && setProfilePicture(e.target.files[0])}
+          className="form-input"
+        />
+        {profilePicture && <p className="text-xs text-green-600 mt-1">Selected: {profilePicture.name}</p>}
       </div>
 
       {error && (

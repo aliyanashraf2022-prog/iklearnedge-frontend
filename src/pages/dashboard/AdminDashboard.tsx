@@ -110,6 +110,16 @@ const AdminDashboard: React.FC = () => {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const handleVerifyTeacher = async (teacherId: string, status: string) => {
+    try {
+      await teachersAPI.verify(teacherId, status);
+      alert(`Teacher ${status} successfully!`);
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to verify teacher: ' + err.message);
+    }
+  };
+
   const handleApproveTeacher = async (teacherId: string) => {
     try {
       await teachersAPI.verify(teacherId, 'approved');
@@ -505,13 +515,31 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td>{new Date(teacher.createdAt || teacher.submitted_at || teacher.created_at).toLocaleDateString()}</td>
                   <td>
-                    <button 
-                      onClick={() => setSelectedTeacher(teacher)}
-                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span>View</span>
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      {teacher.verification_status === 'pending' && (
+                        <>
+                          <button 
+                            onClick={() => handleVerifyTeacher(teacher.id, 'approved')}
+                            className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                          >
+                            Approve
+                          </button>
+                          <button 
+                            onClick={() => handleVerifyTeacher(teacher.id, 'rejected')}
+                            className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      <button 
+                        onClick={() => setSelectedTeacher(teacher)}
+                        className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>View</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
