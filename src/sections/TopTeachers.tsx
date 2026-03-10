@@ -1,25 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-const API_URL = 'https://web-production-5a949.up.railway.app';
-
-interface Teacher {
-  id: string;
-  name: string;
-  profile_picture: string;
-  bio: string;
-  subject_names: string[];
-}
-
 const TopTeachers: React.FC = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/teachers/top?limit=5`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers/top?limit=5`);
         if (res.data.success) {
           setTeachers(res.data.data);
         } else {

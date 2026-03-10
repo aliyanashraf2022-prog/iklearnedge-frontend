@@ -7,8 +7,6 @@ interface PricingItem {
   hourly_price: number;
 }
 
-const API_URL = 'https://web-production-5a949.up.railway.app/api';
-
 const PricingPage: React.FC = () => {
   const [pricing, setPricing] = useState<PricingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +15,7 @@ const PricingPage: React.FC = () => {
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        const res = await axios.get(`${API_URL}/subjects`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/subjects`);
         if (res.data.success && res.data.data) {
           const allPricing: PricingItem[] = [];
           res.data.data.forEach((item: any) => {

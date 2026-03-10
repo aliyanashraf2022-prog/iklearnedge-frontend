@@ -56,38 +56,38 @@ export const authAPI = {
 // Subjects API
 export const subjectsAPI = {
   getAll: () =>
-    apiCall('/subjects'),
+    apiCall('/api/subjects'),
   
   getById: (id: string) =>
-    apiCall(`/subjects/${id}`),
+    apiCall(`/api/subjects/${id}`),
   
   getPrice: (id: string, gradeLevel: string) =>
-    apiCall(`/subjects/${id}/price?gradeLevel=${encodeURIComponent(gradeLevel)}`),
+    apiCall(`/api/subjects/${id}/price?gradeLevel=${encodeURIComponent(gradeLevel)}`),
   
   // Admin only
   getAllAdmin: () =>
-    apiCall('/subjects/all'),
+    apiCall('/api/subjects/all'),
   
   create: (data: any) =>
-    apiCall('/subjects', {
+    apiCall('/api/subjects', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   
   update: (id: string, data: any) =>
-    apiCall(`/subjects/${id}`, {
+    apiCall(`/api/subjects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   
   updatePricing: (id: string, pricingTiers: any[]) =>
-    apiCall(`/subjects/${id}/pricing`, {
+    apiCall(`/api/subjects/${id}/pricing`, {
       method: 'PUT',
       body: JSON.stringify({ pricingTiers }),
     }),
   
   delete: (id: string) =>
-    apiCall(`/subjects/${id}`, {
+    apiCall(`/api/subjects/${id}`, {
       method: 'DELETE',
     }),
 };
@@ -98,103 +98,103 @@ export const teachersAPI = {
     const params = new URLSearchParams();
     if (filters?.subject) params.append('subject', filters.subject);
     if (filters?.search) params.append('search', filters.search);
-    return apiCall(`/teachers?${params.toString()}`);
+    return apiCall(`/api/teachers?${params.toString()}`);
   },
   
   getById: (id: string) =>
-    apiCall(`/teachers/${id}`),
+    apiCall(`/api/teachers/${id}`),
   
   getProfile: () =>
-    apiCall('/teachers/profile'),
+    apiCall('/api/teachers/profile'),
   
   updateProfile: (data: any) =>
-    apiCall('/teachers/profile', {
+    apiCall('/api/teachers/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   
   updateAvailability: (availability: any[]) =>
-    apiCall('/teachers/availability', {
+    apiCall('/api/teachers/availability', {
       method: 'PUT',
       body: JSON.stringify({ availability }),
     }),
   
   // Admin only
   getAllAdmin: () =>
-    apiCall('/teachers/all'),
+    apiCall('/api/teachers/all'),
   
   verify: (id: string, status: string, notes?: string) =>
-    apiCall(`/teachers/${id}/verify`, {
+    apiCall(`/api/teachers/${id}/verify`, {
       method: 'PUT',
       body: JSON.stringify({ status, notes }),
     }),
   
   getDocuments: (id: string) =>
-    apiCall(`/teachers/${id}/documents`),
+    apiCall(`/api/teachers/${id}/documents`),
 };
 
 // Students API
 export const studentsAPI = {
   getProfile: () =>
-    apiCall('/students/profile'),
+    apiCall('/api/students/profile'),
   
   updateProfile: (data: any) =>
-    apiCall('/students/profile', {
+    apiCall('/api/students/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   
   getMyTeachers: () =>
-    apiCall('/students/my-teachers'),
+    apiCall('/api/students/my-teachers'),
   
   getStats: () =>
-    apiCall('/students/stats'),
+    apiCall('/api/students/stats'),
   
   // Admin only
   getAll: () =>
-    apiCall('/students/all'),
+    apiCall('/api/students/all'),
 };
 
 // Bookings API
 export const bookingsAPI = {
   getAll: () =>
-    apiCall('/bookings'),
+    apiCall('/api/bookings'),
   
   getById: (id: string) =>
-    apiCall(`/bookings/${id}`),
+    apiCall(`/api/bookings/${id}`),
   
   create: (data: any) =>
-    apiCall('/bookings', {
+    apiCall('/api/bookings', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   
   updateStatus: (id: string, status: string) =>
-    apiCall(`/bookings/${id}/status`, {
+    apiCall(`/api/bookings/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
   
   getUpcoming: () =>
-    apiCall('/bookings/upcoming/classes'),
+    apiCall('/api/bookings/upcoming/classes'),
 };
 
 // Payments API
 export const paymentsAPI = {
   getAll: () =>
-    apiCall('/payments'),
+    apiCall('/api/payments'),
   
   getPending: () =>
-    apiCall('/payments/pending'),
+    apiCall('/api/payments/pending'),
   
   uploadProof: (data: { bookingId: string; fileUrl: string; fileName?: string }) =>
-    apiCall('/payments', {
+    apiCall('/api/payments', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   
   verify: (id: string, status: string, notes?: string) =>
-    apiCall(`/payments/${id}/verify`, {
+    apiCall(`/api/payments/${id}/verify`, {
       method: 'PUT',
       body: JSON.stringify({ status, notes }),
     }),
@@ -203,22 +203,22 @@ export const paymentsAPI = {
 // Admin API
 export const adminAPI = {
   getStats: () =>
-    apiCall('/admin/stats'),
+    apiCall('/api/admin/stats'),
   
   getRecentActivity: () =>
-    apiCall('/admin/recent-activity'),
+    apiCall('/api/admin/recent-activity'),
   
   getAllUsers: () =>
-    apiCall('/admin/users'),
+    apiCall('/api/admin/users'),
   
   updateUser: (id: string, data: any) =>
-    apiCall(`/admin/users/${id}`, {
+    apiCall(`/api/admin/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   
   deleteUser: (id: string) =>
-    apiCall(`/admin/users/${id}`, {
+    apiCall(`/api/admin/users/${id}`, {
       method: 'DELETE',
     }),
   
@@ -226,7 +226,7 @@ export const adminAPI = {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
-    return apiCall(`/admin/revenue?${params.toString()}`);
+    return apiCall(`/api/admin/revenue?${params.toString()}`);
   },
 };
 
@@ -237,7 +237,7 @@ export const uploadAPI = {
     formData.append('file', file);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/profile-picture`, {
+    const response = await fetch(`${API_BASE_URL}/api/upload/profile-picture`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -258,7 +258,7 @@ export const uploadAPI = {
     formData.append('type', type);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/document`, {
+    const response = await fetch(`${API_BASE_URL}/api/upload/document`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -279,7 +279,7 @@ export const uploadAPI = {
     formData.append('bookingId', bookingId);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/payment-proof`, {
+    const response = await fetch(`${API_BASE_URL}/api/upload/payment-proof`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
