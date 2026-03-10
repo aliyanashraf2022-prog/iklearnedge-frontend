@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
+const API_URL = 'https://web-production-5a949.up.railway.app';
+
 interface Teacher {
   id: string;
   name: string;
   profile_picture: string;
   bio: string;
-  years_of_experience: number;
   subject_names: string[];
 }
 
@@ -18,7 +19,7 @@ const TopTeachers: React.FC = () => {
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/teachers/top?limit=5`);
+        const res = await axios.get(`${API_URL}/api/teachers/top?limit=5`);
         if (res.data.success) {
           setTeachers(res.data.data);
         } else {
@@ -48,10 +49,9 @@ const TopTeachers: React.FC = () => {
               className="w-24 h-24 rounded-full object-cover mb-4 border-2 border-[#f5a623]"
             />
             <h3 className="text-lg font-semibold mb-1">{teacher.name}</h3>
-            <div className="text-sm text-gray-500 mb-2">{teacher.years_of_experience} years experience</div>
             <div className="text-xs text-gray-600 mb-3">{teacher.bio}</div>
             <div className="flex flex-wrap gap-2 mt-2">
-              {teacher.subject_names.map((subject) => (
+              {teacher.subject_names?.map((subject) => (
                 <span key={subject} className="px-2 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-xs">
                   {subject}
                 </span>
