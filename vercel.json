@@ -1,0 +1,5 @@
+{
+  "installCommand": "cd app && npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "app/dist"
+}
