@@ -5,18 +5,22 @@ interface Teacher {
   id: number;
   name: string;
   profile_picture: string;
-  years_of_experience: number;
-  description: string;
+  bio: string;
+  subject_names: string[];
 }
 
 const OurTeam: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
-    // Fetch top 10 teachers from backend
     fetch('/api/teachers/top')
       .then(res => res.json())
-      .then(data => setTeachers(data));
+      .then(data => {
+        if (data.success && data.data) {
+          setTeachers(data.data);
+        }
+      })
+      .catch(console.error);
   }, []);
 
   return (
@@ -34,8 +38,8 @@ const OurTeam: React.FC = () => {
               className="w-24 h-24 rounded-full object-cover mb-4 border-2 border-[#f5a623]"
             />
             <h2 className="text-xl font-semibold mb-1">{teacher.name}</h2>
-            <p className="text-sm text-gray-500 mb-2">{teacher.years_of_experience} years experience</p>
-            <p className="text-gray-700 text-center text-sm">{teacher.description}</p>
+            <p className="text-sm text-gray-500 mb-2">{teacher.subject_names?.join(', ')}</p>
+            <p className="text-gray-700 text-center text-sm">{teacher.bio}</p>
           </div>
         ))}
       </div>
