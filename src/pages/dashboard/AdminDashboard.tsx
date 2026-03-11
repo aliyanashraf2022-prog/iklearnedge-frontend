@@ -321,11 +321,6 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <DollarSign className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
 
         <div className="stat-card">
           <div className="flex items-center justify-between">
@@ -967,7 +962,6 @@ const AdminDashboard: React.FC = () => {
                   <th>Student</th>
                   <th>Teacher</th>
                   <th>Subject</th>
-                  </th>
                   <th>Date & Time</th>
                   <th>Duration</th>
                   <th>Amount</th>
