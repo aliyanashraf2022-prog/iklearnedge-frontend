@@ -63,13 +63,14 @@ const TeacherDashboard: React.FC = () => {
     try {
       // Fetch teacher profile
       const teacherData = await teachersAPI.getProfile();
-      setTeacher(teacherData.teacher);
-      setBio(teacherData.teacher?.bio || '');
+      const teacherInfo = teacherData.data || teacherData;
+      setTeacher(teacherInfo);
+      setBio(teacherInfo?.bio || '');
       setSettingsForm({
-        name: teacherData.teacher?.name || '',
-        email: teacherData.teacher?.email || '',
-        phoneNumber: teacherData.teacher?.phoneNumber || '',
-        profilePicture: teacherData.teacher?.profilePicture || ''
+        name: teacherInfo?.name || '',
+        email: teacherInfo?.email || '',
+        phoneNumber: teacherInfo?.phoneNumber || '',
+        profilePicture: teacherInfo?.profile_picture || teacherInfo?.profilePicture || ''
       });
 
       // Fetch subjects
@@ -205,18 +206,18 @@ const TeacherDashboard: React.FC = () => {
               Welcome back, {teacher?.name || 'Teacher'}!
             </h2>
             <p className="text-white/80">
-              {teacher?.verificationStatus === 'approved' 
+              {teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved'
                 ? 'You are live and accepting new students.' 
                 : 'Your profile is under review. You will be notified once approved.'}
             </p>
           </div>
           <div className="hidden md:block">
             <div className={`px-4 py-2 rounded-full ${
-              teacher?.isLive 
+              teacher?.is_live || teacher?.isLive
                 ? 'bg-green-500 text-white' 
                 : 'bg-yellow-500 text-white'
             }`}>
-              {teacher?.isLive ? '● Live' : '⏳ Pending'}
+              {teacher?.is_live || teacher?.isLive ? '● Live' : '⏳ Pending'}
             </div>
           </div>
         </div>
@@ -598,7 +599,7 @@ const TeacherDashboard: React.FC = () => {
           <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Profile Picture</h3>
           <div className="flex flex-col items-center">
             <img 
-              src={settingsForm.profilePicture || '/default-avatar.png'} 
+              src={teacher?.profile_picture || teacher?.profilePicture || settingsForm.profilePicture || '/default-avatar.png'} 
               alt="Profile"
               className="w-32 h-32 rounded-full object-cover border-4 border-[#f5a623] mb-4"
             />
@@ -766,8 +767,8 @@ const TeacherDashboard: React.FC = () => {
         <div className="space-y-3">
           <div className="flex justify-between items-center py-3 border-b">
             <span className="text-gray-600">Account Status</span>
-            <span className={`badge ${teacher?.verificationStatus === 'approved' ? 'badge-approved' : 'badge-pending'}`}>
-              {teacher?.verificationStatus === 'approved' ? 'Verified' : 'Pending'}
+            <span className={`badge ${teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved' ? 'badge-approved' : 'badge-pending'}`}>
+              {teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved' ? 'Verified' : 'Pending'}
             </span>
           </div>
           <div className="flex justify-between items-center py-3 border-b">
@@ -790,7 +791,7 @@ const TeacherDashboard: React.FC = () => {
         <div className="p-6">
           <div className="flex items-center space-x-3 mb-8">
             <img 
-              src={teacher?.profilePicture || '/default-avatar.png'} 
+              src={teacher?.profile_picture || teacher?.profilePicture || '/default-avatar.png'} 
               alt={teacher?.name}
               className="w-12 h-12 rounded-full object-cover border-2 border-[#f5a623]"
             />

@@ -3,10 +3,10 @@ import {
   LayoutDashboard, Users, UserCheck, CreditCard, 
   Calendar, Settings, LogOut, CheckCircle, XCircle,
   Eye, FileText, Bell, Search, Filter, BookOpen,
-  Plus, Edit2, Trash2, DollarSign, Loader2
+  Plus, Edit2, Trash2, DollarSign, Loader2, Star, User
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI } from '@/services/api';
+import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI } from '@/services/api';
 import type { Teacher, Subject } from '@/types';
 
 const AdminDashboard: React.FC = () => {
@@ -22,8 +22,12 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
-  const [pendingVerifications, setPendingVerifications] = useState<any[]>([]); // ✅ FIX: Changed to state
+  const [pendingVerifications, setPendingVerifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any>({ all: [], upcoming: [], completed: [], pending: [] });
+  const [settings, setSettings] = useState<any>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -71,12 +75,25 @@ const AdminDashboard: React.FC = () => {
       }
 
       // Fetch teachers
-      const teachersData = await teachersAPI.getAllAdmin();
-      const allTeachers = teachersData.data || teachersData.teachers || [];
+      const teachersData = await adminAPI.getAllTeachers();
+      const allTeachers = teachersData.data || teachersData || [];
+      setTeachers(allTeachers);
 
       setPendingVerifications(allTeachers.filter((t: any) => 
         (t.verificationStatus || t.verification_status) === 'pending'
       ));
+
+      // Fetch students
+      const studentsData = await adminAPI.getAllStudents();
+      setStudents(studentsData.data || studentsData || []);
+
+      // Fetch classes
+      const classesData = await adminAPI.getClasses();
+      setClasses(classesData.data || classesData);
+
+      // Fetch settings
+      const settingsData = await adminAPI.getSettings();
+      setSettings(settingsData.data || settingsData);
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAllAdmin();
@@ -103,9 +120,11 @@ const AdminDashboard: React.FC = () => {
   const sidebarItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
+    { id: 'teachers', label: 'Teachers', icon: UserCheck },
+    { id: 'top-teachers', label: 'Top Verified', icon: Star },
+    { id: 'students', label: 'Students', icon: User },
     { id: 'verifications', label: 'Verifications', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
-    { id: 'users', label: 'Users', icon: Users },
     { id: 'classes', label: 'Classes', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -150,6 +169,36 @@ const AdminDashboard: React.FC = () => {
       fetchData(); // Refresh data
     } catch (err: any) {
       alert('Failed to approve payment: ' + err.message);
+    }
+  };
+
+  const handleAddTopTeacher = async (teacherId: string, position: number = 0) => {
+    try {
+      await adminAPI.addTopTeacher(teacherId, position);
+      alert('Teacher added to top verified list!');
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to add teacher: ' + err.message);
+    }
+  };
+
+  const handleRemoveTopTeacher = async (teacherId: string) => {
+    try {
+      await adminAPI.removeTopTeacher(teacherId);
+      alert('Teacher removed from top verified list!');
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to remove teacher: ' + err.message);
+    }
+  };
+
+  const handleUpdateSettings = async (newSettings: any) => {
+    try {
+      await adminAPI.updateSettings(newSettings);
+      setSettings({ ...settings, ...newSettings });
+      alert('Settings updated successfully!');
+    } catch (err: any) {
+      alert('Failed to update settings: ' + err.message);
     }
   };
 
@@ -265,8 +314,13 @@ const AdminDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">Total Revenue</p>
-              <p className="stat-value text-green-6us">AED {(stats?.totalRevenue || 0).toLocaleString()}</p>
+              <p className="stat-value text-green-6us">{formatCurrency(stats?.totalRevenue || 0)}</p>
             </div>
+            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+              <DollarSign className="w-7 h-7 text-green-600" />
+            </div>
+          </div>
+        </div>
             <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
               <DollarSign className="w-7 h-7 text-green-600" />
             </div>
@@ -414,7 +468,7 @@ const AdminDashboard: React.FC = () => {
                   {subject.pricingTiers?.slice(0, 3).map((tier) => (
                     <div key={tier.id} className="flex justify-between text-sm">
                       <span className="text-gray-600">{tier.gradeLevel}</span>
-                      <span className="font-medium text-[#f5a623]">AED {tier.pricePerHour}/hr</span>
+                      <span className="font-medium text-[#f5a623]">{formatCurrency(tier.pricePerHour).replace(settings.currency_symbol, '')} {settings.currency_symbol}/hr</span>
                     </div>
                   ))}
                   {(subject.pricingTiers?.length || 0) > 3 && (
@@ -646,6 +700,439 @@ const AdminDashboard: React.FC = () => {
     </div>
   );
 
+  const renderTeachers = () => (
+    <div className="space-y-6">
+      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">All Teachers</h3>
+      
+      <div className="data-table">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th>Teacher</th>
+              <th>Subjects</th>
+              <th>Status</th>
+              <th>Top Verified</th>
+              <th>Joined On</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {teachers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-gray-500">
+                  No teachers found
+                </td>
+              </tr>
+            ) : (
+              teachers.map((teacher: any) => (
+                <tr key={teacher.id}>
+                  <td>
+                    <div className="flex items-center space-x-3">
+                      <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
+                      <div>
+                        <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
+                        <p className="text-sm text-gray-500">{teacher.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    {(teacher.subjects || []).length > 0 ? `${(teacher.subjects || []).length} subjects` : '-'}
+                  </td>
+                  <td>
+                    <span className={`badge ${
+                      teacher.verification_status === 'approved' ? 'badge-approved' :
+                      teacher.verification_status === 'pending' ? 'badge-pending' : 'badge-rejected'
+                    }`}>
+                      {teacher.verification_status}
+                    </span>
+                  </td>
+                  <td>
+                    {teacher.is_top_verified ? (
+                      <span className="flex items-center text-amber-500">
+                        <Star className="w-4 h-4 mr-1 fill-current" />
+                        #{teacher.top_position + 1}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td>{new Date(teacher.created_at || teacher.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <div className="flex items-center space-x-2">
+                      {!teacher.is_top_verified && teacher.verification_status === 'approved' && (
+                        <button 
+                          onClick={() => handleAddTopTeacher(teacher.id)}
+                          className="px-3 py-1 bg-amber-500 text-white rounded text-xs hover:bg-amber-600"
+                          title="Add to Top Verified"
+                        >
+                          <Star className="w-3 h-3" />
+                        </button>
+                      )}
+                      {teacher.is_top_verified && (
+                        <button 
+                          onClick={() => handleRemoveTopTeacher(teacher.id)}
+                          className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                          title="Remove from Top Verified"
+                        >
+                          <XCircle className="w-3 h-3" />
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => setSelectedTeacher(teacher)}
+                        className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>View</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderTopTeachers = () => {
+    const topTeachers = teachers.filter((t: any) => t.is_top_verified);
+    return (
+      <div className="space-y-6">
+        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Top Verified Teachers</h3>
+        <p className="text-gray-500">Manage which verified teachers appear on the homepage</p>
+        
+        {topTeachers.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p>No top verified teachers yet</p>
+            <p className="text-sm">Go to Teachers tab to add teachers to this list</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {topTeachers.sort((a: any, b: any) => a.top_position - b.top_position).map((teacher: any) => (
+              <div key={teacher.id} className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name} className="w-16 h-16 rounded-full object-cover" />
+                  <div>
+                    <h4 className="font-bold text-[#4a4a4a]">{teacher.name || teacher.full_name}</h4>
+                    <p className="text-sm text-gray-500">{teacher.email}</p>
+                    <span className="text-amber-500 font-bold">#{teacher.top_position + 1}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{teacher.bio || 'No bio available'}</p>
+                <button 
+                  onClick={() => handleRemoveTopTeacher(teacher.id)}
+                  className="w-full py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Remove from Top List</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStudents = () => (
+    <div className="space-y-6">
+      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">All Students</h3>
+      
+      <div className="data-table">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Grade Level</th>
+              <th>Location</th>
+              <th>Parent Contact</th>
+              <th>Joined On</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center py-8 text-gray-500">
+                  No students found
+                </td>
+              </tr>
+            ) : (
+              students.map((student: any) => (
+                <tr key={student.id}>
+                  <td>
+                    <div className="flex items-center space-x-3">
+                      <img src={student.profilePicture || student.profile_picture || '/default-avatar.png'} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
+                      <div>
+                        <p className="font-medium text-[#4a4a4a]">{student.name || student.full_name}</p>
+                        <p className="text-sm text-gray-500">{student.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{student.grade_level || '-'}</td>
+                  <td>{student.location || '-'}</td>
+                  <td>{student.parent_contact || '-'}</td>
+                  <td>{new Date(student.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderClasses = () => (
+    <div className="space-y-6">
+      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Class Management</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-blue-50 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-600 font-semibold">Upcoming Classes</p>
+              <p className="text-3xl font-bold text-blue-700">{classes.upcoming?.length || 0}</p>
+            </div>
+            <Calendar className="w-10 h-10 text-blue-400" />
+          </div>
+        </div>
+        <div className="bg-green-50 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-600 font-semibold">Completed Classes</p>
+              <p className="text-3xl font-bold text-green-700">{classes.completed?.length || 0}</p>
+            </div>
+            <CheckCircle className="w-10 h-10 text-green-400" />
+          </div>
+        </div>
+        <div className="bg-yellow-50 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-600 font-semibold">Pending Classes</p>
+              <p className="text-3xl font-bold text-yellow-700">{classes.pending?.length || 0}</p>
+            </div>
+            <CreditCard className="w-10 h-10 text-yellow-400" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h4 className="text-lg font-semibold text-[#4a4a4a]">Upcoming Classes</h4>
+        {(!classes.upcoming || classes.upcoming.length === 0) ? (
+          <p className="text-gray-500 text-center py-8">No upcoming classes</p>
+        ) : (
+          <div className="data-table">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Teacher</th>
+                  <th>Subject</th>
+                  <th>Date & Time</th>
+                  <th>Duration</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.upcoming.map((cls: any) => (
+                  <tr key={cls.id}>
+                    <td>{cls.student_name}</td>
+                    <td>{cls.teacher_name}</td>
+                    <td>{cls.subject_name}</td>
+                    <td>{new Date(cls.scheduled_date).toLocaleString()}</td>
+                    <td>{cls.duration} min</td>
+                    <td>{settings.currency || 'AED'} {cls.total_amount}</td>
+                    <td>
+                      <span className="badge badge-approved">{cls.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h4 className="text-lg font-semibold text-[#4a4a4a]">Completed Classes</h4>
+        {(!classes.completed || classes.completed.length === 0) ? (
+          <p className="text-gray-500 text-center py-8">No completed classes</p>
+        ) : (
+          <div className="data-table">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Teacher</th>
+                  <th>Subject</th>
+                  </th>
+                  <th>Date & Time</th>
+                  <th>Duration</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.completed.map((cls: any) => (
+                  <tr key={cls.id}>
+                    <td>{cls.student_name}</td>
+                    <td>{cls.teacher_name}</td>
+                    <td>{cls.subject_name}</td>
+                    <td>{new Date(cls.scheduled_date).toLocaleString()}</td>
+                    <td>{cls.duration} min</td>
+                    <td>{settings.currency || 'AED'} {cls.total_amount}</td>
+                    <td>
+                      <span className="badge bg-green-100 text-green-700">{cls.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSettings = () => {
+    const [localSettings, setLocalSettings] = useState({
+      primary_color: settings.primary_color || '#f5a623',
+      secondary_color: settings.secondary_color || '#4a4a4a',
+      accent_color: settings.accent_color || '#3498db',
+      currency: settings.currency || 'AED',
+      currency_symbol: settings.currency_symbol || 'د.إ',
+      site_name: settings.site_name || 'IkLearnEdge',
+    });
+
+    const handleSave = () => {
+      handleUpdateSettings(localSettings);
+    };
+
+    return (
+      <div className="space-y-6">
+        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Website Settings</h3>
+        
+        <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+          <div>
+            <h4 className="font-semibold text-[#4a4a4a] mb-4">Color Theme</h4>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="form-label">Primary Color</label>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="color" 
+                    value={localSettings.primary_color}
+                    onChange={(e) => setLocalSettings({...localSettings, primary_color: e.target.value})}
+                    className="w-12 h-10 rounded cursor-pointer"
+                  />
+                  <input 
+                    type="text" 
+                    value={localSettings.primary_color}
+                    onChange={(e) => setLocalSettings({...localSettings, primary_color: e.target.value})}
+                    className="form-input flex-1"
+                    placeholder="#f5a623"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Secondary Color</label>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="color" 
+                    value={localSettings.secondary_color}
+                    onChange={(e) => setLocalSettings({...localSettings, secondary_color: e.target.value})}
+                    className="w-12 h-10 rounded cursor-pointer"
+                  />
+                  <input 
+                    type="text" 
+                    value={localSettings.secondary_color}
+                    onChange={(e) => setLocalSettings({...localSettings, secondary_color: e.target.value})}
+                    className="form-input flex-1"
+                    placeholder="#4a4a4a"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Accent Color</label>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="color" 
+                    value={localSettings.accent_color}
+                    onChange={(e) => setLocalSettings({...localSettings, accent_color: e.target.value})}
+                    className="w-12 h-10 rounded cursor-pointer"
+                  />
+                  <input 
+                    type="text" 
+                    value={localSettings.accent_color}
+                    onChange={(e) => setLocalSettings({...localSettings, accent_color: e.target.value})}
+                    className="form-input flex-1"
+                    placeholder="#3498db"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-[#4a4a4a] mb-4">Currency Settings</h4>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="form-label">Currency Code</label>
+                <select 
+                  value={localSettings.currency}
+                  onChange={(e) => setLocalSettings({...localSettings, currency: e.target.value})}
+                  className="form-input"
+                >
+                  <option value="AED">AED - UAE Dirham</option>
+                  <option value="USD">USD - US Dollar</option>
+                  <option value="EUR">EUR - Euro</option>
+                  <option value="GBP">GBP - British Pound</option>
+                  <option value="SAR">SAR - Saudi Riyal</option>
+                  <option value="KWD">KWD - Kuwaiti Dinar</option>
+                  <option value="QAR">QAR - Qatari Riyal</option>
+                  <option value="BHD">BHD - Bahraini Dinar</option>
+                  <option value="OMR">OMR - Omani Rial</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Currency Symbol</label>
+                <input 
+                  type="text" 
+                  value={localSettings.currency_symbol}
+                  onChange={(e) => setLocalSettings({...localSettings, currency_symbol: e.target.value})}
+                  className="form-input"
+                  placeholder="د.إ"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-[#4a4a4a] mb-4">Site Name</h4>
+            <input 
+              type="text" 
+              value={localSettings.site_name}
+              onChange={(e) => setLocalSettings({...localSettings, site_name: e.target.value})}
+              className="form-input max-w-md"
+              placeholder="IkLearnEdge"
+            />
+          </div>
+
+          <div className="pt-4 border-t">
+            <button 
+              onClick={handleSave}
+              className="btn-primary"
+            >
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-layout">
       {/* Sidebar */}
@@ -712,19 +1199,14 @@ const AdminDashboard: React.FC = () => {
           )}
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'subjects' && renderSubjects()}
+          {activeTab === 'teachers' && renderTeachers()}
+          {activeTab === 'top-teachers' && renderTopTeachers()}
+          {activeTab === 'students' && renderStudents()}
           {activeTab === 'verifications' && renderVerifications()}
           {activeTab === 'payments' && renderPayments()}
           {activeTab === 'users' && renderUsers()}
-          {activeTab === 'classes' && (
-            <div className="text-center py-12 text-gray-500">
-              Classes management coming soon...
-            </div>
-          )}
-          {activeTab === 'settings' && (
-            <div className="text-center py-12 text-gray-500">
-              Settings coming soon...
-            </div>
-          )}
+          {activeTab === 'classes' && renderClasses()}
+          {activeTab === 'settings' && renderSettings()}
         </div>
       </main>
 

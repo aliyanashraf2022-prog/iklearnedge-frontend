@@ -11,11 +11,11 @@ module.exports = {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
+          DEFAULT: "rgb(var(--primary))", // Use rgb() for CSS variables set via style tag
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
+          DEFAULT: "rgb(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
@@ -27,7 +27,7 @@ module.exports = {
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "rgb(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
@@ -39,14 +39,14 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
         sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+          DEFAULT: "rgb(var(--sidebar-background))",
+          foreground: "rgb(var(--sidebar-foreground))",
+          primary: "rgb(var(--sidebar-primary))",
+          "primary-foreground": "rgb(var(--sidebar-primary-foreground))",
+          accent: "rgb(var(--sidebar-accent))",
+          "accent-foreground": "rgb(var(--sidebar-accent-foreground))",
+          border: "rgb(var(--sidebar-border))",
+          ring: "rgb(var(--sidebar-ring))",
         },
       },
       borderRadius: {

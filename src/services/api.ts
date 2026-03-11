@@ -101,6 +101,9 @@ export const teachersAPI = {
     return apiCall(`/api/teachers?${params.toString()}`);
   },
   
+  getTop: (limit: number = 5) =>
+    apiCall(`/api/teachers/top?limit=${limit}`),
+  
   getById: (id: string) =>
     apiCall(`/api/teachers/${id}`),
   
@@ -211,6 +214,38 @@ export const adminAPI = {
   getAllUsers: () =>
     apiCall('/api/admin/users'),
   
+  getAllTeachers: () =>
+    apiCall('/api/admin/teachers'),
+  
+  getAllStudents: () =>
+    apiCall('/api/admin/students'),
+  
+  getClasses: (status?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    return apiCall(`/api/admin/classes?${params.toString()}`);
+  },
+  
+  getSettings: () =>
+    apiCall('/api/admin/settings'),
+  
+  updateSettings: (settings: any) =>
+    apiCall('/api/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  
+  addTopTeacher: (teacherId: string, position?: number) =>
+    apiCall(`/api/admin/teachers/top/${teacherId}`, {
+      method: 'POST',
+      body: JSON.stringify({ position }),
+    }),
+  
+  removeTopTeacher: (teacherId: string) =>
+    apiCall(`/api/admin/teachers/top/${teacherId}`, {
+      method: 'DELETE',
+    }),
+  
   updateUser: (id: string, data: any) =>
     apiCall(`/api/admin/users/${id}`, {
       method: 'PUT',
@@ -228,6 +263,12 @@ export const adminAPI = {
     if (endDate) params.append('endDate', endDate);
     return apiCall(`/api/admin/revenue?${params.toString()}`);
   },
+};
+
+// Public Settings API
+export const settingsAPI = {
+  getAll: () =>
+    apiCall('/api/settings'),
 };
 
 // Upload API
@@ -304,4 +345,5 @@ export default {
   payments: paymentsAPI,
   admin: adminAPI,
   upload: uploadAPI,
+  settings: settingsAPI,
 };
