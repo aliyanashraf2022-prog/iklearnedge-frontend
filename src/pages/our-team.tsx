@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GraduationCap } from 'lucide-react';
+import { teachersAPI } from '@/services/api';
 
 interface Teacher {
   id: number;
@@ -13,11 +14,18 @@ const OurTeam: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
-    fetch('/api/teachers/top')
-      .then(res => res.json())
+    teachersAPI.getTop(5)
       .then(data => {
         if (data.success && data.data) {
-          setTeachers(data.data);
+          const processedTeachers = data.data.map((t: any) => ({
+            ...t,
+            subject_names: Array.isArray(t.subject_names) 
+              ? t.subject_names 
+              : typeof t.subject_names === 'string' 
+                ? t.subject_names.replace(/[{}]/g, '').split(',').map((s: string) => s.trim()).filter(Boolean)
+                : []
+          }));
+          setTeachers(processedTeachers);
         }
       })
       .catch(console.error);

@@ -67,7 +67,6 @@ export const subjectsAPI = {
   getPrice: (id: string, gradeLevel: string) =>
     apiCall(`subjects/${id}/price?gradeLevel=${encodeURIComponent(gradeLevel)}`),
   
-  // Admin only
   getAllAdmin: () =>
     apiCall('subjects/all'),
   
@@ -125,7 +124,6 @@ export const teachersAPI = {
       body: JSON.stringify({ availability }),
     }),
   
-  // Admin only
   getAllAdmin: () =>
     apiCall('teachers/all'),
   
@@ -156,7 +154,6 @@ export const studentsAPI = {
   getStats: () =>
     apiCall('students/stats'),
   
-  // Admin only
   getAll: () =>
     apiCall('students/all'),
 };
