@@ -58,12 +58,12 @@ const AdminDashboard: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // ✅ FIX: Added timeout handling for stats to prevent 30s delay
+      // Fetch stats
       try {
         const stats = await adminAPI.getStats();
         setStats(stats.data || stats);
       } catch (statsErr) {
-        console.warn('Stats API timeout/failed:', statsErr);
+        console.warn('Stats API failed:', statsErr);
         setStats({
           totalTeachers: 0,
           totalStudents: 0,
@@ -80,7 +80,6 @@ const AdminDashboard: React.FC = () => {
       const teachersData = await adminAPI.getAllTeachers();
       const allTeachers = teachersData.data || teachersData || [];
       setTeachers(allTeachers);
-
       setPendingVerifications(allTeachers.filter((t: any) => 
         (t.verificationStatus || t.verification_status) === 'pending'
       ));
@@ -99,7 +98,7 @@ const AdminDashboard: React.FC = () => {
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAllAdmin();
-      setSubjects(subjectsData.data || subjectsData.subjects || []);
+      setSubjects(subjectsData.data?.subjects || subjectsData.data || subjectsData.subjects || []);
 
       // Fetch users
       const usersData = await adminAPI.getAllUsers();
@@ -107,7 +106,7 @@ const AdminDashboard: React.FC = () => {
 
       // Fetch pending payments
       const paymentsData = await paymentsAPI.getPending();
-      setPendingPayments(paymentsData.data || paymentsData.payments || []);
+      setPendingPayments(paymentsData.data?.payments || paymentsData.data || paymentsData.payments || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
       console.error('Error fetching data:', err);

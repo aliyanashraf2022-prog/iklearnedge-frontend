@@ -68,26 +68,28 @@ const StudentDashboard: React.FC = () => {
     try {
       // Fetch student profile
       const studentData = await studentsAPI.getProfile();
-      setStudent(studentData.student);
+      const studentInfo = studentData.data || studentData;
+      setStudent(studentInfo);
       setSettingsForm({
-        name: studentData.student?.name || '',
-        email: studentData.student?.email || '',
-        phoneNumber: studentData.student?.phoneNumber || '',
-        gradeLevel: studentData.student?.gradeLevel || '',
-        profilePicture: studentData.student?.profilePicture || ''
+        name: studentInfo?.name || '',
+        email: studentInfo?.email || '',
+        phoneNumber: studentInfo?.phoneNumber || '',
+        gradeLevel: studentInfo?.gradeLevel || studentInfo?.grade_level || '',
+        profilePicture: studentInfo?.profilePicture || studentInfo?.profile_picture || ''
       });
 
       // Fetch teachers
       const teachersData = await teachersAPI.getAll();
-      setTeachers(teachersData.teachers || []);
+      const teachersList = teachersData.data?.teachers || teachersData.data || teachersData.teachers || [];
+      setTeachers(teachersList);
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAll();
-      setSubjects(subjectsData.subjects || []);
+      setSubjects(subjectsData.data || subjectsData.subjects || []);
 
       // Fetch student bookings
       const bookingsData = await bookingsAPI.getAll();
-      setBookings(bookingsData.bookings || []);
+      setBookings(bookingsData.data?.bookings || bookingsData.data || bookingsData.bookings || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
       console.error('Error fetching data:', err);
