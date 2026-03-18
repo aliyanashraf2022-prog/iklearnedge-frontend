@@ -6,11 +6,13 @@ import {
   Plus, Edit2, Trash2, DollarSign, Loader2, Star, User
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI } from '@/services/api';
 import type { Teacher, Subject } from '@/types';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
+  const { formatCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);

@@ -12,8 +12,16 @@ const TopTeachers: React.FC = () => {
     const fetchTeachers = async () => {
       try {
         const res = await teachersAPI.getTop(5);
-        if (res.success) {
-          setTeachers(res.data);
+        if (res.success && Array.isArray(res.data)) {
+          const processedTeachers = res.data.map((t: any) => ({
+            ...t,
+            subject_names: Array.isArray(t.subject_names) 
+              ? t.subject_names 
+              : typeof t.subject_names === 'string' 
+                ? t.subject_names.replace(/[{}]/g, '').split(',').map((s: string) => s.trim()).filter(Boolean)
+                : []
+          }));
+          setTeachers(processedTeachers);
         } else {
           setError('Failed to load teachers');
         }
