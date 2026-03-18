@@ -14,6 +14,7 @@ import StudentDashboard from '@/pages/dashboard/StudentDashboard';
 import OurTeam from '@/pages/our-team';
 import ContactUs from '@/pages/contact-us';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { SettingsProvider } from '@/context/SettingsContext';
 import './App.css';
 
 // Landing Page Component
@@ -199,11 +200,13 @@ const AppContent: React.FC = () => {
 // Main App
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </AuthProvider>
+    <SettingsProvider>
+      <AuthProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </AuthProvider>
+    </SettingsProvider>
   );
 }
 
