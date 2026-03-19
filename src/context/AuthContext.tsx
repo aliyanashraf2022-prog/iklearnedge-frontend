@@ -20,6 +20,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Clear token on window close/unload - forces logout when browser closes
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      localStorage.removeItem('token');
+      setUser(null);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   // Check for existing token on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
