@@ -75,9 +75,10 @@ const TeacherDashboard: React.FC = () => {
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAll();
-      setSubjects(subjectsData.data?.subjects || subjectsData.data || subjectsData.subjects || []);
+      setSubjects(subjectsData.data || subjectsData.subjects || []);
 
-      // Fetch bookings - empty for now
+      // Fetch bookings will be implemented when we have the endpoint
+      // For now, use mock data or empty array
       setBookings([]);
       
       // Stats

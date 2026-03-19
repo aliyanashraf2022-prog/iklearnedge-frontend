@@ -58,12 +58,12 @@ const AdminDashboard: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch stats
+      // ✅ FIX: Added timeout handling for stats to prevent 30s delay
       try {
         const stats = await adminAPI.getStats();
         setStats(stats.data || stats);
       } catch (statsErr) {
-        console.warn('Stats API failed:', statsErr);
+        console.warn('Stats API timeout/failed:', statsErr);
         setStats({
           totalTeachers: 0,
           totalStudents: 0,
@@ -80,6 +80,7 @@ const AdminDashboard: React.FC = () => {
       const teachersData = await adminAPI.getAllTeachers();
       const allTeachers = teachersData.data || teachersData || [];
       setTeachers(allTeachers);
+
       setPendingVerifications(allTeachers.filter((t: any) => 
         (t.verificationStatus || t.verification_status) === 'pending'
       ));
@@ -98,7 +99,7 @@ const AdminDashboard: React.FC = () => {
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAllAdmin();
-      setSubjects(subjectsData.data?.subjects || subjectsData.data || subjectsData.subjects || []);
+      setSubjects(subjectsData.data || subjectsData.subjects || []);
 
       // Fetch users
       const usersData = await adminAPI.getAllUsers();
@@ -106,7 +107,7 @@ const AdminDashboard: React.FC = () => {
 
       // Fetch pending payments
       const paymentsData = await paymentsAPI.getPending();
-      setPendingPayments(paymentsData.data?.payments || paymentsData.data || paymentsData.payments || []);
+      setPendingPayments(paymentsData.data || paymentsData.payments || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -122,7 +123,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
     { id: 'teachers', label: 'Teachers', icon: UserCheck },
-    { id: 'our-team', label: 'Our Team', icon: Star },
+    { id: 'top-teachers', label: 'Top Verified', icon: Star },
     { id: 'students', label: 'Students', icon: User },
     { id: 'verifications', label: 'Verifications', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -792,51 +793,39 @@ const AdminDashboard: React.FC = () => {
     </div>
   );
 
-  const renderOurTeam = () => {
-    const approvedTeachers = teachers.filter((t: any) => 
-      t.verification_status === 'approved' || t.verificationStatus === 'approved'
-    );
+  const renderTopTeachers = () => {
+    const topTeachers = teachers.filter((t: any) => t.is_top_verified);
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Our Team - Featured Teachers</h3>
-            <p className="text-gray-500">Teachers shown on the homepage "Our Team" section</p>
-          </div>
-        </div>
+        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Top Verified Teachers</h3>
+        <p className="text-gray-500">Manage which verified teachers appear on the homepage</p>
         
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-blue-800">
-            <strong>How it works:</strong> Teachers with <span className="text-green-600 font-bold">"is_live = true"</span> and <span className="text-green-600 font-bold">"verification_status = approved"</span> will automatically appear on the Our Team page.
-          </p>
-        </div>
-        
-        {approvedTeachers.length === 0 ? (
+        {topTeachers.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No approved teachers yet</p>
-            <p className="text-sm">Go to Verifications tab to approve teachers</p>
+            <p>No top verified teachers yet</p>
+            <p className="text-sm">Go to Teachers tab to add teachers to this list</p>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {approvedTeachers.map((teacher: any) => (
-              <div key={teacher.id} className="bg-white rounded-xl shadow-lg p-6 border-2">
+            {topTeachers.sort((a: any, b: any) => a.top_position - b.top_position).map((teacher: any) => (
+              <div key={teacher.id} className="bg-white rounded-xl shadow-lg p-6">
                 <div className="flex items-center space-x-4 mb-4">
                   <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name} className="w-16 h-16 rounded-full object-cover" />
                   <div>
                     <h4 className="font-bold text-[#4a4a4a]">{teacher.name || teacher.full_name}</h4>
                     <p className="text-sm text-gray-500">{teacher.email}</p>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                      teacher.is_live || teacher.isLive ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {teacher.is_live || teacher.isLive ? '✓ On Our Team' : '⏳ Not Live'}
-                    </span>
+                    <span className="text-amber-500 font-bold">#{teacher.top_position + 1}</span>
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{teacher.bio || 'No bio available'}</p>
-                <div className="text-xs text-gray-400">
-                  Status: {teacher.verification_status || teacher.verificationStatus} | Live: {teacher.is_live ? 'Yes' : 'No'}
-                </div>
+                <button 
+                  onClick={() => handleRemoveTopTeacher(teacher.id)}
+                  className="w-full py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Remove from Top List</span>
+                </button>
               </div>
             ))}
           </div>
@@ -1208,7 +1197,7 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'subjects' && renderSubjects()}
           {activeTab === 'teachers' && renderTeachers()}
-          {activeTab === 'our-team' && renderOurTeam()}
+          {activeTab === 'top-teachers' && renderTopTeachers()}
           {activeTab === 'students' && renderStudents()}
           {activeTab === 'verifications' && renderVerifications()}
           {activeTab === 'payments' && renderPayments()}

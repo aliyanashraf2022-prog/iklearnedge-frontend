@@ -68,20 +68,23 @@ const StudentDashboard: React.FC = () => {
     try {
       // Fetch student profile
       const studentData = await studentsAPI.getProfile();
-      const studentInfo = studentData.data || studentData;
-      setStudent(studentInfo);
+      setStudent(studentData.student);
       setSettingsForm({
-        name: studentInfo?.name || '',
-        email: studentInfo?.email || '',
-        phoneNumber: studentInfo?.phoneNumber || '',
-        gradeLevel: studentInfo?.gradeLevel || studentInfo?.grade_level || '',
-        profilePicture: studentInfo?.profilePicture || studentInfo?.profile_picture || ''
+        name: studentData.student?.name || '',
+        email: studentData.student?.email || '',
+        phoneNumber: studentData.student?.phoneNumber || '',
+        gradeLevel: studentData.student?.gradeLevel || '',
+        profilePicture: studentData.student?.profilePicture || ''
       });
 
-      // Fetch teachers
-      const teachersData = await teachersAPI.getAll();
-      const teachersList = teachersData.data?.teachers || teachersData.data || teachersData.teachers || [];
-      setTeachers(teachersList);
+      // Fetch teachers (fallback to public top list if generic endpoint not available)
+      try {
+        const teachersData = await teachersAPI.getAll();
+        setTeachers(teachersData.data || teachersData.teachers || []);
+      } catch (_e) {
+        const top = await teachersAPI.getTop(50);
+        setTeachers(top.data || []);
+      }
 
       // Fetch subjects
       const subjectsData = await subjectsAPI.getAll();
@@ -89,7 +92,7 @@ const StudentDashboard: React.FC = () => {
 
       // Fetch student bookings
       const bookingsData = await bookingsAPI.getAll();
-      setBookings(bookingsData.data?.bookings || bookingsData.data || bookingsData.bookings || []);
+      setBookings(bookingsData.data || bookingsData.bookings || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -102,12 +105,16 @@ const StudentDashboard: React.FC = () => {
   const filteredTeachers = teachers
     .filter(t => t.isLive && t.verificationStatus === 'approved')
     .filter(t => {
-      const matchesSearch = t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           t.subjects?.some((s: string) => {
-                             const sub = subjects.find((subj: any) => subj.id === s);
-                             return sub?.name?.toLowerCase().includes(searchQuery.toLowerCase());
-                           });
-      const matchesSubject = !selectedSubject || t.subjects?.includes(selectedSubject);
+      const subjectIds: string[] = Array.isArray(t.subjects)
+        ? t.subjects.map((it: any) => (typeof it === 'object' && it !== null ? it.id : it))
+        : [];
+      const matchesSearch =
+        t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        subjectIds.some((sid: string) => {
+          const sub = subjects.find((subj: any) => subj.id === sid);
+          return sub?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        });
+      const matchesSubject = !selectedSubject || subjectIds.includes(selectedSubject);
       return matchesSearch && matchesSubject;
     });
 
@@ -120,7 +127,7 @@ const StudentDashboard: React.FC = () => {
         const subject = subjects.find((s: any) => s.id === id);
         return { id, name: nameFromObj || subject?.name || (typeof id === 'string' ? id : '') };
       })
-      .filter((x: any) => x.name);
+      .filter((x) => x.name);
   };
 
   // Get price for a subject based on student's grade
