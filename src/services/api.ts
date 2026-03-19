@@ -5,10 +5,11 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 async function apiCall(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   
-  // Ensure single slash between base URL and endpoint
-  const separator = API_BASE_URL.endsWith('/') || endpoint.startsWith('/') ? '' : '/';
+  // Build URL properly
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+  const url = API_BASE_URL ? `${API_BASE_URL}/${cleanEndpoint}` : `/${cleanEndpoint}`;
   
-  const response = await fetch(`${API_BASE_URL}${separator}${endpoint}`, {
+  const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
