@@ -103,9 +103,6 @@ export const teachersAPI = {
     return apiCall(`teachers?${params.toString()}`);
   },
   
-  getTop: (limit: number = 5) =>
-    apiCall(`teachers/top?limit=${limit}`),
-  
   getById: (id: string) =>
     apiCall(`teachers/${id}`),
   
@@ -183,6 +180,33 @@ export const bookingsAPI = {
   
   getUpcoming: () =>
     apiCall('bookings/upcoming/classes'),
+  
+  // Demo bookings
+  getDemoRequests: () =>
+    apiCall('bookings/demo/requests'),
+  
+  createDemo: (data: { teacherId: number; subjectId: number; scheduledDate: string }) =>
+    apiCall('bookings/demo', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  acceptDemo: (id: string, meetingLink: string) =>
+    apiCall(`bookings/${id}/meeting`, {
+      method: 'PUT',
+      body: JSON.stringify({ meetingLink }),
+    }),
+  
+  confirmDemo: (id: string, meetingLink?: string) =>
+    apiCall(`bookings/${id}/confirm`, {
+      method: 'PUT',
+      body: JSON.stringify({ meetingLink }),
+    }),
+  
+  cancelDemo: (id: string) =>
+    apiCall(`bookings/${id}/demo`, {
+      method: 'DELETE',
+    }),
 };
 
 // Payments API
@@ -236,17 +260,6 @@ export const adminAPI = {
     apiCall('admin/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
-    }),
-  
-  addTopTeacher: (teacherId: string, position?: number) =>
-    apiCall(`admin/teachers/top/${teacherId}`, {
-      method: 'POST',
-      body: JSON.stringify({ position }),
-    }),
-  
-  removeTopTeacher: (teacherId: string) =>
-    apiCall(`admin/teachers/top/${teacherId}`, {
-      method: 'DELETE',
     }),
   
   updateUser: (id: string, data: any) =>
@@ -355,6 +368,30 @@ export const uploadAPI = {
   },
 };
 
+// Notifications API
+export const notificationsAPI = {
+  getAll: () =>
+    apiCall('notifications'),
+  
+  getUnreadCount: () =>
+    apiCall('notifications/unread/count'),
+  
+  markAsRead: (id: string) =>
+    apiCall(`notifications/${id}/read`, {
+      method: 'PUT',
+    }),
+  
+  markAllAsRead: () =>
+    apiCall('notifications/read/all', {
+      method: 'PUT',
+    }),
+  
+  delete: (id: string) =>
+    apiCall(`notifications/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 export default {
   auth: authAPI,
   subjects: subjectsAPI,
@@ -365,4 +402,5 @@ export default {
   admin: adminAPI,
   upload: uploadAPI,
   settings: settingsAPI,
+  notifications: notificationsAPI,
 };

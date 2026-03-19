@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../models/database');
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -74,7 +74,7 @@ router.get('/bank-details', async (req, res) => {
 // @route   PUT /api/settings/bank-details
 // @desc    Update bank transfer details
 // @access  Private/Admin
-router.put('/bank-details', authenticate, authorizeAdmin, async (req, res) => {
+router.put('/bank-details', authenticate, requireAdmin, async (req, res) => {
   try {
     const { bankName, accountNumber, iban, accountHolderName, swiftCode, branchAddress } = req.body;
 

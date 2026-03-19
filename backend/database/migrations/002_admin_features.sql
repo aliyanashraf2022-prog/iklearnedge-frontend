@@ -74,3 +74,30 @@ CREATE TABLE IF NOT EXISTS payment_proofs (
   public_id VARCHAR(255),
   uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add is_demo column to bookings if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bookings' AND column_name = 'is_demo') THEN
+    ALTER TABLE bookings ADD COLUMN is_demo BOOLEAN DEFAULT false;
+  END IF;
+END $$;
+
+-- Notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER,
+  user_role VARCHAR(20),
+  target_role VARCHAR(20),
+  title VARCHAR(255) NOT NULL,
+  message TEXT,
+  type VARCHAR(50) DEFAULT 'info',
+  link VARCHAR(255),
+  is_read BOOLEAN DEFAULT false,
+  read_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = false;

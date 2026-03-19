@@ -5,11 +5,10 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 async function apiCall(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   
-  // Build URL properly
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  const url = API_BASE_URL ? `${API_BASE_URL}/${cleanEndpoint}` : `/${cleanEndpoint}`;
+  // Ensure single slash between base URL and endpoint
+  const separator = API_BASE_URL.endsWith('/') || endpoint.startsWith('/') ? '' : '/';
   
-  const response = await fetch(url, {
+  const response = await fetch(`${API_BASE_URL}${separator}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -68,7 +67,6 @@ export const subjectsAPI = {
   getPrice: (id: string, gradeLevel: string) =>
     apiCall(`subjects/${id}/price?gradeLevel=${encodeURIComponent(gradeLevel)}`),
   
-  // Admin only
   getAllAdmin: () =>
     apiCall('subjects/all'),
   
@@ -105,9 +103,6 @@ export const teachersAPI = {
     return apiCall(`teachers?${params.toString()}`);
   },
   
-  getTop: (limit: number = 5) =>
-    apiCall(`teachers/top?limit=${limit}`),
-  
   getById: (id: string) =>
     apiCall(`teachers/${id}`),
   
@@ -126,7 +121,9 @@ export const teachersAPI = {
       body: JSON.stringify({ availability }),
     }),
   
-  // Admin only
+  getAvailability: () =>
+    apiCall('teachers/availability'),
+  
   getAllAdmin: () =>
     apiCall('teachers/all'),
   
@@ -157,7 +154,6 @@ export const studentsAPI = {
   getStats: () =>
     apiCall('students/stats'),
   
-  // Admin only
   getAll: () =>
     apiCall('students/all'),
 };
@@ -184,6 +180,33 @@ export const bookingsAPI = {
   
   getUpcoming: () =>
     apiCall('bookings/upcoming/classes'),
+  
+  // Demo bookings
+  getDemoRequests: () =>
+    apiCall('bookings/demo/requests'),
+  
+  createDemo: (data: { teacherId: number; subjectId: number; scheduledDate: string }) =>
+    apiCall('bookings/demo', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  acceptDemo: (id: string, meetingLink: string) =>
+    apiCall(`bookings/${id}/meeting`, {
+      method: 'PUT',
+      body: JSON.stringify({ meetingLink }),
+    }),
+  
+  confirmDemo: (id: string, meetingLink?: string) =>
+    apiCall(`bookings/${id}/confirm`, {
+      method: 'PUT',
+      body: JSON.stringify({ meetingLink }),
+    }),
+  
+  cancelDemo: (id: string) =>
+    apiCall(`bookings/${id}/demo`, {
+      method: 'DELETE',
+    }),
 };
 
 // Payments API
@@ -239,17 +262,6 @@ export const adminAPI = {
       body: JSON.stringify(settings),
     }),
   
-  addTopTeacher: (teacherId: string, position?: number) =>
-    apiCall(`admin/teachers/top/${teacherId}`, {
-      method: 'POST',
-      body: JSON.stringify({ position }),
-    }),
-  
-  removeTopTeacher: (teacherId: string) =>
-    apiCall(`admin/teachers/top/${teacherId}`, {
-      method: 'DELETE',
-    }),
-  
   updateUser: (id: string, data: any) =>
     apiCall(`admin/users/${id}`, {
       method: 'PUT',
@@ -277,7 +289,14 @@ export const settingsAPI = {
   getBankDetails: () =>
     apiCall('settings/bank-details'),
   
-  updateBankDetails: (data: any) =>
+  updateBankDetails: (data: {
+    bankName?: string;
+    accountNumber?: string;
+    iban?: string;
+    accountHolderName?: string;
+    swiftCode?: string;
+    branchAddress?: string;
+  }) =>
     apiCall('settings/bank-details', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -349,6 +368,30 @@ export const uploadAPI = {
   },
 };
 
+// Notifications API
+export const notificationsAPI = {
+  getAll: () =>
+    apiCall('notifications'),
+  
+  getUnreadCount: () =>
+    apiCall('notifications/unread/count'),
+  
+  markAsRead: (id: string) =>
+    apiCall(`notifications/${id}/read`, {
+      method: 'PUT',
+    }),
+  
+  markAllAsRead: () =>
+    apiCall('notifications/read/all', {
+      method: 'PUT',
+    }),
+  
+  delete: (id: string) =>
+    apiCall(`notifications/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
 export default {
   auth: authAPI,
   subjects: subjectsAPI,
@@ -359,4 +402,5 @@ export default {
   admin: adminAPI,
   upload: uploadAPI,
   settings: settingsAPI,
+  notifications: notificationsAPI,
 };

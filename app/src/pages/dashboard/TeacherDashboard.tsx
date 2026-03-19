@@ -22,6 +22,7 @@ const TeacherDashboard: React.FC = () => {
   // Data states
   const [teacher, setTeacher] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [demoRequests, setDemoRequests] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,6 +81,14 @@ const TeacherDashboard: React.FC = () => {
       // Fetch bookings will be implemented when we have the endpoint
       // For now, use mock data or empty array
       setBookings([]);
+      
+      // Fetch demo requests
+      try {
+        const demoData = await bookingsAPI.getDemoRequests();
+        setDemoRequests(demoData.data || demoData || []);
+      } catch (_demoErr) {
+        setDemoRequests([]);
+      }
       
       // Stats
       setStats({
@@ -146,6 +155,26 @@ const TeacherDashboard: React.FC = () => {
     } catch (err: any) {
       console.error('Schedule update error:', err);
       alert('Failed to update schedule: ' + (err.message || 'Please try again'));
+    }
+  };
+
+  const handleAcceptDemo = async (demoId: string, meetingLink: string) => {
+    try {
+      await bookingsAPI.acceptDemo(demoId, meetingLink);
+      alert('Demo confirmed! Meeting link has been shared with the student.');
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to accept demo: ' + err.message);
+    }
+  };
+
+  const handleDeclineDemo = async (demoId: string) => {
+    try {
+      await bookingsAPI.cancelDemo(demoId);
+      alert('Demo request declined.');
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to decline demo: ' + err.message);
     }
   };
 
@@ -455,8 +484,143 @@ const TeacherDashboard: React.FC = () => {
     </div>
   );
 
-  const renderStudents = () => (
+  const DemoRequestCard: React.FC<{
+    demo: any;
+    onAccept: (id: string, meetingLink: string) => void;
+    onDecline: (id: string) => void;
+  }> = ({ demo, onAccept, onDecline }) => {
+    const [meetingLink, setMeetingLink] = useState('');
+    const [showAcceptForm, setShowAcceptForm] = useState(false);
+
+    return (
+      <div className="bg-white rounded-lg p-4 border border-yellow-200">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <p className="font-medium text-[#4a4a4a]">{demo.student_name || 'New Student'}</p>
+            <p className="text-sm text-gray-600">{demo.student_email}</p>
+            <p className="text-sm text-gray-500">{demo.subject_name}</p>
+            <p className="text-sm font-medium text-[#f5a623]">
+              {new Date(demo.scheduled_date).toLocaleDateString()} at{' '}
+              {new Date(demo.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+            Pending
+          </span>
+        </div>
+
+        {showAcceptForm ? (
+          <div className="space-y-2">
+            <input
+              type="url"
+              placeholder="Paste Zoom or Google Meet link"
+              value={meetingLink}
+              onChange={(e) => setMeetingLink(e.target.value)}
+              className="form-input text-sm"
+            />
+            <div className="flex space-x-2">
+              <button
+                onClick={() => {
+                  onAccept(demo.id, meetingLink);
+                  setShowAcceptForm(false);
+                }}
+                disabled={!meetingLink.trim()}
+                className="flex-1 btn-primary text-sm py-2"
+              >
+                Confirm & Send Link
+              </button>
+              <button
+                onClick={() => setShowAcceptForm(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowAcceptForm(true)}
+              className="flex-1 btn-primary text-sm py-2"
+            >
+              Accept
+            </button>
+            <button
+              onClick={() => onDecline(demo.id)}
+              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
+            >
+              Decline
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStudents = () => {
+    const pendingDemos = demoRequests.filter((d: any) => d.status === 'demo_pending');
+    const confirmedDemos = demoRequests.filter((d: any) => d.status === 'demo_confirmed');
+    
+    return (
     <div className="space-y-6">
+      {/* Demo Requests Section */}
+      {(pendingDemos.length > 0 || confirmedDemos.length > 0) && (
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
+          <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins'] mb-4">Demo Class Requests</h3>
+          
+          {pendingDemos.length > 0 && (
+            <div className="mb-4">
+              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
+                <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                Pending Requests ({pendingDemos.length})
+              </h4>
+              <div className="space-y-3">
+                {pendingDemos.map((demo: any) => (
+                  <DemoRequestCard 
+                    key={demo.id} 
+                    demo={demo} 
+                    onAccept={handleAcceptDemo}
+                    onDecline={handleDeclineDemo}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {confirmedDemos.length > 0 && (
+            <div>
+              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                Upcoming Demo Classes ({confirmedDemos.length})
+              </h4>
+              <div className="space-y-3">
+                {confirmedDemos.map((demo: any) => (
+                  <div key={demo.id} className="bg-white rounded-lg p-4 border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-[#4a4a4a]">{demo.student_name || 'Student'}</p>
+                        <p className="text-sm text-gray-600">{demo.subject_name}</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(demo.scheduled_date).toLocaleDateString()} at {new Date(demo.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {demo.meeting_link && (
+                          <a href={demo.meeting_link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                            Join Meeting
+                          </a>
+                        )}
+                      </div>
+                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                        Confirmed
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">My Students</h3>
       
       <div className="data-table">
@@ -501,6 +665,7 @@ const TeacherDashboard: React.FC = () => {
       </div>
     </div>
   );
+  };
 
   const renderDocuments = () => (
     <div className="space-y-6">

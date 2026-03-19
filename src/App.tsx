@@ -22,9 +22,6 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
   onLoginClick, 
   onRegisterClick 
 }) => {
-  // ...existing code...
-  // Import TopTeachers
-  const TopTeachers = React.lazy(() => import('./sections/TopTeachers'));
   return (
     <div className="min-h-screen bg-white">
       <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
@@ -32,10 +29,6 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
       <HowItWorks />
       <Testimonials />
       <Subjects onLoginClick={onLoginClick} />
-      {/* Show top teachers section */}
-      <React.Suspense fallback={<div className="py-8 text-center">Loading top teachers...</div>}>
-        <TopTeachers />
-      </React.Suspense>
       <DirectorIntro 
         directorName="Rubina Altaf"
         directorTitle="Director"

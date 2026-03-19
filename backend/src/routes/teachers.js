@@ -64,42 +64,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// @route   GET /api/teachers/top
-// @desc    Get top teachers (Public)
-// @access  Public
-router.get('/top', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 5;
-    
-    // Get approved teachers (simple fallback)
-    const result = await query(`
-      SELECT 
-        t.id, t.user_id, u.name, u.profile_picture, t.bio,
-        COALESCE(ARRAY_AGG(DISTINCT s.name) FILTER (WHERE s.name IS NOT NULL), ARRAY[]::text[]) as subject_names
-      FROM teachers t
-      JOIN users u ON t.user_id = u.id
-      LEFT JOIN teacher_subjects ts ON t.id = ts.teacher_id
-      LEFT JOIN subjects s ON ts.subject_id = s.id
-      WHERE t.verification_status = 'approved' AND t.is_live = true
-      GROUP BY t.id, u.id
-      ORDER BY t.created_at DESC
-      LIMIT $1
-    `, [limit]);
-    
-    res.json({
-      success: true,
-      count: result.rows.length,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Get public top teachers error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get top teachers'
-    });
-  }
-});
-
 // @route   GET /api/teachers/all
 // @desc    Get all teachers (admin only)
 // @access  Private/Admin

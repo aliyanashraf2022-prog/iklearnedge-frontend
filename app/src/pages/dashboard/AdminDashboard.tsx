@@ -124,7 +124,6 @@ const AdminDashboard: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
     { id: 'teachers', label: 'Teachers', icon: UserCheck },
-    { id: 'top-teachers', label: 'Top Verified', icon: Star },
     { id: 'students', label: 'Students', icon: User },
     { id: 'verifications', label: 'Verifications', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -173,26 +172,6 @@ const AdminDashboard: React.FC = () => {
       fetchData(); // Refresh data
     } catch (err: any) {
       alert('Failed to approve payment: ' + err.message);
-    }
-  };
-
-  const handleAddTopTeacher = async (teacherId: string, position: number = 0) => {
-    try {
-      await adminAPI.addTopTeacher(teacherId, position);
-      alert('Teacher added to top verified list!');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to add teacher: ' + err.message);
-    }
-  };
-
-  const handleRemoveTopTeacher = async (teacherId: string) => {
-    try {
-      await adminAPI.removeTopTeacher(teacherId);
-      alert('Teacher removed from top verified list!');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to remove teacher: ' + err.message);
     }
   };
 
@@ -711,7 +690,6 @@ const AdminDashboard: React.FC = () => {
               <th>Teacher</th>
               <th>Subjects</th>
               <th>Status</th>
-              <th>Top Verified</th>
               <th>Joined On</th>
               <th>Actions</th>
             </tr>
@@ -719,7 +697,7 @@ const AdminDashboard: React.FC = () => {
           <tbody>
             {teachers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-500">
+                <td colSpan={5} className="text-center py-8 text-gray-500">
                   No teachers found
                 </td>
               </tr>
@@ -746,45 +724,15 @@ const AdminDashboard: React.FC = () => {
                       {teacher.verification_status}
                     </span>
                   </td>
-                  <td>
-                    {teacher.is_top_verified ? (
-                      <span className="flex items-center text-amber-500">
-                        <Star className="w-4 h-4 mr-1 fill-current" />
-                        #{teacher.top_position + 1}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
                   <td>{new Date(teacher.created_at || teacher.createdAt).toLocaleDateString()}</td>
                   <td>
-                    <div className="flex items-center space-x-2">
-                      {!teacher.is_top_verified && teacher.verification_status === 'approved' && (
-                        <button 
-                          onClick={() => handleAddTopTeacher(teacher.id)}
-                          className="px-3 py-1 bg-amber-500 text-white rounded text-xs hover:bg-amber-600"
-                          title="Add to Top Verified"
-                        >
-                          <Star className="w-3 h-3" />
-                        </button>
-                      )}
-                      {teacher.is_top_verified && (
-                        <button 
-                          onClick={() => handleRemoveTopTeacher(teacher.id)}
-                          className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                          title="Remove from Top Verified"
-                        >
-                          <XCircle className="w-3 h-3" />
-                        </button>
-                      )}
-                      <button 
-                        onClick={() => setSelectedTeacher(teacher)}
-                        className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>View</span>
-                      </button>
-                    </div>
+                    <button 
+                      onClick={() => setSelectedTeacher(teacher)}
+                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View</span>
+                    </button>
                   </td>
                 </tr>
               ))
@@ -794,47 +742,6 @@ const AdminDashboard: React.FC = () => {
       </div>
     </div>
   );
-
-  const renderTopTeachers = () => {
-    const topTeachers = teachers.filter((t: any) => t.is_top_verified);
-    return (
-      <div className="space-y-6">
-        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Top Verified Teachers</h3>
-        <p className="text-gray-500">Manage which verified teachers appear on the homepage</p>
-        
-        {topTeachers.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No top verified teachers yet</p>
-            <p className="text-sm">Go to Teachers tab to add teachers to this list</p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {topTeachers.sort((a: any, b: any) => a.top_position - b.top_position).map((teacher: any) => (
-              <div key={teacher.id} className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center space-x-4 mb-4">
-                  <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name} className="w-16 h-16 rounded-full object-cover" />
-                  <div>
-                    <h4 className="font-bold text-[#4a4a4a]">{teacher.name || teacher.full_name}</h4>
-                    <p className="text-sm text-gray-500">{teacher.email}</p>
-                    <span className="text-amber-500 font-bold">#{teacher.top_position + 1}</span>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{teacher.bio || 'No bio available'}</p>
-                <button 
-                  onClick={() => handleRemoveTopTeacher(teacher.id)}
-                  className="w-full py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>Remove from Top List</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderStudents = () => (
     <div className="space-y-6">
@@ -1199,7 +1106,6 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'subjects' && renderSubjects()}
           {activeTab === 'teachers' && renderTeachers()}
-          {activeTab === 'top-teachers' && renderTopTeachers()}
           {activeTab === 'students' && renderStudents()}
           {activeTab === 'verifications' && renderVerifications()}
           {activeTab === 'payments' && renderPayments()}

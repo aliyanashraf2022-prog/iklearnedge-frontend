@@ -18,8 +18,10 @@ const StudentDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const [bookingStep, setBookingStep] = useState(1);
   const [selectedBookingSubject, setSelectedBookingSubject] = useState<string>('');
+  const [selectedDemoSlot, setSelectedDemoSlot] = useState<any>(null);
   const [bookingDuration, setBookingDuration] = useState<number>(60);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -258,6 +260,26 @@ const StudentDashboard: React.FC = () => {
       alert('Failed to upload payment: ' + err.message);
     } finally {
       setUploadingFile(false);
+    }
+  };
+
+  const handleBookDemo = async () => {
+    if (!selectedTeacher || !selectedDemoSlot) return;
+    
+    try {
+      await bookingsAPI.createDemo({
+        teacherId: selectedTeacher.id,
+        subjectId: selectedDemoSlot.subjectId,
+        scheduledDate: selectedDemoSlot.scheduledDate
+      });
+      
+      alert('Demo class requested! The teacher will respond shortly.');
+      setShowDemoModal(false);
+      setSelectedDemoSlot(null);
+      setSelectedTeacher(null);
+      fetchData();
+    } catch (err: any) {
+      alert('Failed to book demo: ' + err.message);
     }
   };
 
@@ -977,11 +999,89 @@ const StudentDashboard: React.FC = () => {
               </button>
               <button 
                 onClick={() => {
-                  alert('Demo class booking coming soon! Contact us for more details.');
+                  setShowDemoModal(true);
                 }}
                 className="btn-secondary flex-1 py-3 text-lg flex items-center justify-center space-x-2"
               >
                 <span>Book a Demo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Booking Modal */}
+      {showDemoModal && selectedTeacher && (
+        <div className="modal-overlay" onClick={() => setShowDemoModal(false)}>
+          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
+                Book a Free Demo Class
+              </h3>
+              <button onClick={() => setShowDemoModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                <XCircle className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-700">
+                  Book a free 30-minute demo class with {selectedTeacher.name}. 
+                  The teacher will confirm your session time and share a meeting link.
+                </p>
+              </div>
+
+              <div>
+                <label className="form-label">Select Subject</label>
+                <select 
+                  className="form-input"
+                  value={selectedDemoSlot?.subjectId || ''}
+                  onChange={(e) => setSelectedDemoSlot({ 
+                    ...selectedDemoSlot, 
+                    subjectId: parseInt(e.target.value),
+                    scheduledDate: selectedDemoSlot?.scheduledDate || new Date().toISOString()
+                  })}
+                >
+                  <option value="">Choose a subject</option>
+                  {getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label">Preferred Date & Time</label>
+                <input
+                  type="datetime-local"
+                  className="form-input"
+                  value={selectedDemoSlot?.scheduledDate?.slice(0, 16) || ''}
+                  onChange={(e) => setSelectedDemoSlot({ 
+                    ...selectedDemoSlot, 
+                    scheduledDate: new Date(e.target.value).toISOString()
+                  })}
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Times shown in your local timezone
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-[#4a4a4a] mb-2">What happens next?</h4>
+                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
+                  <li>Your demo request is sent to the teacher</li>
+                  <li>The teacher will review and confirm</li>
+                  <li>You'll receive a meeting link via notification</li>
+                  <li>Join the free 30-minute session</li>
+                </ol>
+              </div>
+
+              <button 
+                onClick={handleBookDemo}
+                disabled={!selectedDemoSlot?.subjectId || !selectedDemoSlot?.scheduledDate}
+                className="btn-primary w-full py-3 flex items-center justify-center space-x-2"
+              >
+                <span>Request Demo Class</span>
               </button>
             </div>
           </div>

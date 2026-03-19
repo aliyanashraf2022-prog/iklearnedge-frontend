@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, Phone, ChevronDown, GraduationCap } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import NotificationBell from '@/components/NotificationBell';
 
 interface NavigationProps {
   onLoginClick: () => void;
@@ -139,6 +140,7 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
             )}
             {user ? (
               <div className="flex items-center space-x-3">
+                <NotificationBell />
                 <span className="text-sm text-[#4a4a4a]">Welcome, {user.name}</span>
                 <button 
                   onClick={logout}

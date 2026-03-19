@@ -175,26 +175,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleAddTopTeacher = async (teacherId: string, position: number = 0) => {
-    try {
-      await adminAPI.addTopTeacher(teacherId, position);
-      alert('Teacher added to top verified list!');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to add teacher: ' + err.message);
-    }
-  };
-
-  const handleRemoveTopTeacher = async (teacherId: string) => {
-    try {
-      await adminAPI.removeTopTeacher(teacherId);
-      alert('Teacher removed from top verified list!');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to remove teacher: ' + err.message);
-    }
-  };
-
   const handleUpdateSettings = async (newSettings: any) => {
     try {
       await adminAPI.updateSettings(newSettings);
@@ -710,7 +690,6 @@ const AdminDashboard: React.FC = () => {
               <th>Teacher</th>
               <th>Subjects</th>
               <th>Status</th>
-              <th>Top Verified</th>
               <th>Joined On</th>
               <th>Actions</th>
             </tr>
@@ -745,45 +724,15 @@ const AdminDashboard: React.FC = () => {
                       {teacher.verification_status}
                     </span>
                   </td>
-                  <td>
-                    {teacher.is_top_verified ? (
-                      <span className="flex items-center text-amber-500">
-                        <Star className="w-4 h-4 mr-1 fill-current" />
-                        #{teacher.top_position + 1}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
                   <td>{new Date(teacher.created_at || teacher.createdAt).toLocaleDateString()}</td>
                   <td>
-                    <div className="flex items-center space-x-2">
-                      {!teacher.is_top_verified && teacher.verification_status === 'approved' && (
-                        <button 
-                          onClick={() => handleAddTopTeacher(teacher.id)}
-                          className="px-3 py-1 bg-amber-500 text-white rounded text-xs hover:bg-amber-600"
-                          title="Add to Top Verified"
-                        >
-                          <Star className="w-3 h-3" />
-                        </button>
-                      )}
-                      {teacher.is_top_verified && (
-                        <button 
-                          onClick={() => handleRemoveTopTeacher(teacher.id)}
-                          className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                          title="Remove from Top Verified"
-                        >
-                          <XCircle className="w-3 h-3" />
-                        </button>
-                      )}
-                      <button 
-                        onClick={() => setSelectedTeacher(teacher)}
-                        className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>View</span>
-                      </button>
-                    </div>
+                    <button 
+                      onClick={() => setSelectedTeacher(teacher)}
+                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View</span>
+                    </button>
                   </td>
                 </tr>
               ))
