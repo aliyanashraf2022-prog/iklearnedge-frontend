@@ -58,62 +58,90 @@ const AdminDashboard: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
+    
+    // Fetch stats
     try {
-      // Fetch stats
-      try {
-        const stats = await adminAPI.getStats();
-        setStats(stats.data || stats);
-      } catch (statsErr) {
-        console.warn('Stats API failed:', statsErr);
-        setStats({
-          totalTeachers: 0,
-          totalStudents: 0,
-          activeSubjects: 0,
-          totalRevenue: 0,
-          pendingVerifications: 0,
-          pendingPayments: 0,
-          totalBookings: 0,
-          completedClasses: 0
-        });
-      }
+      const stats = await adminAPI.getStats();
+      setStats(stats.data || stats);
+    } catch (statsErr) {
+      console.warn('Stats API failed:', statsErr);
+      setStats({
+        totalTeachers: 0,
+        totalStudents: 0,
+        activeSubjects: 0,
+        totalRevenue: 0,
+        pendingVerifications: 0,
+        pendingPayments: 0,
+        totalBookings: 0,
+        completedClasses: 0
+      });
+    }
 
-      // Fetch teachers
+    // Fetch teachers
+    try {
       const teachersData = await adminAPI.getAllTeachers();
       const allTeachers = teachersData.data || teachersData || [];
       setTeachers(allTeachers);
       setPendingVerifications(allTeachers.filter((t: any) => 
         (t.verificationStatus || t.verification_status) === 'pending'
       ));
+    } catch (err) {
+      console.error('Failed to fetch teachers:', err);
+    }
 
-      // Fetch students
+    // Fetch students
+    try {
       const studentsData = await adminAPI.getAllStudents();
       setStudents(studentsData.data || studentsData || []);
+    } catch (err) {
+      console.error('Failed to fetch students:', err);
+    }
 
-      // Fetch classes
+    // Fetch classes
+    try {
       const classesData = await adminAPI.getClasses();
       setClasses(classesData.data || classesData);
+    } catch (err) {
+      console.error('Failed to fetch classes:', err);
+    }
 
-      // Fetch settings
+    // Fetch settings
+    try {
       const settingsData = await adminAPI.getSettings();
       setSettings(settingsData.data || settingsData);
+    } catch (err) {
+      console.error('Failed to fetch settings:', err);
+    }
 
-      // Fetch subjects
+    // Fetch subjects - THIS IS THE KEY FETCH
+    try {
       const subjectsData = await subjectsAPI.getAllAdmin();
-      setSubjects(subjectsData.data?.subjects || subjectsData.data || subjectsData.subjects || []);
+      const subjectsList = subjectsData.data || subjectsData.subjects || [];
+      setSubjects(subjectsList);
+      console.log('Subjects loaded:', subjectsList.length);
+    } catch (err: any) {
+      console.error('Failed to fetch subjects:', err);
+      setSubjects([]);
+      setError('Failed to load subjects: ' + (err.message || 'Please try again'));
+    }
 
-      // Fetch users
+    // Fetch users
+    try {
       const usersData = await adminAPI.getAllUsers();
       setUsers(usersData.data || usersData.users || []);
-
-      // Fetch pending payments
-      const paymentsData = await paymentsAPI.getPending();
-      setPendingPayments(paymentsData.data?.payments || paymentsData.data || paymentsData.payments || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch data');
-      console.error('Error fetching data:', err);
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
     }
+
+    // Fetch pending payments
+    try {
+      const paymentsData = await paymentsAPI.getPending();
+      setPendingPayments(paymentsData.data || paymentsData.payments || []);
+    } catch (err) {
+      console.error('Failed to fetch payments:', err);
+    }
+    
+    setIsLoading(false);
   };
 
   // ✅ FIX: Removed this line - now using state from API
@@ -123,7 +151,6 @@ const AdminDashboard: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
     { id: 'teachers', label: 'Teachers', icon: UserCheck },
-    { id: 'our-team', label: 'Our Team', icon: Star },
     { id: 'students', label: 'Students', icon: User },
     { id: 'verifications', label: 'Verifications', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -415,7 +442,39 @@ const AdminDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Subjects Grid */}
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <p>{error}</p>
+          <button 
+            onClick={fetchData}
+            className="mt-2 text-sm text-red-600 hover:underline"
+          >
+            Click to retry
+          </button>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-[#f5a623]" />
+          <span className="ml-3 text-gray-500">Loading subjects...</span>
+        </div>
+      ) : subjects.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl">
+          <BookOpen className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+          <h4 className="text-lg font-medium text-gray-500">No subjects found</h4>
+          <p className="text-sm text-gray-400 mb-4">Add your first subject to get started</p>
+          <button 
+            onClick={() => setIsAddingSubject(true)}
+            className="btn-primary"
+          >
+            Add Subject
+          </button>
+        </div>
+      ) : (
+      /* Subjects Grid */
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {subjects.map((subject) => (
           <div key={subject.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -474,6 +533,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 
@@ -697,7 +757,7 @@ const AdminDashboard: React.FC = () => {
           <tbody>
             {teachers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-500">
+                <td colSpan={5} className="text-center py-8 text-gray-500">
                   No teachers found
                 </td>
               </tr>
@@ -742,59 +802,6 @@ const AdminDashboard: React.FC = () => {
       </div>
     </div>
   );
-
-  const renderOurTeam = () => {
-    const approvedTeachers = teachers.filter((t: any) => 
-      t.verification_status === 'approved' || t.verificationStatus === 'approved'
-    );
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Our Team - Featured Teachers</h3>
-            <p className="text-gray-500">Teachers shown on the homepage "Our Team" section</p>
-          </div>
-        </div>
-        
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-blue-800">
-            <strong>How it works:</strong> Teachers with <span className="text-green-600 font-bold">"is_live = true"</span> and <span className="text-green-600 font-bold">"verification_status = approved"</span> will automatically appear on the Our Team page.
-          </p>
-        </div>
-        
-        {approvedTeachers.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <Star className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>No approved teachers yet</p>
-            <p className="text-sm">Go to Verifications tab to approve teachers</p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {approvedTeachers.map((teacher: any) => (
-              <div key={teacher.id} className="bg-white rounded-xl shadow-lg p-6 border-2">
-                <div className="flex items-center space-x-4 mb-4">
-                  <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name} className="w-16 h-16 rounded-full object-cover" />
-                  <div>
-                    <h4 className="font-bold text-[#4a4a4a]">{teacher.name || teacher.full_name}</h4>
-                    <p className="text-sm text-gray-500">{teacher.email}</p>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                      teacher.is_live || teacher.isLive ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {teacher.is_live || teacher.isLive ? '✓ On Our Team' : '⏳ Not Live'}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{teacher.bio || 'No bio available'}</p>
-                <div className="text-xs text-gray-400">
-                  Status: {teacher.verification_status || teacher.verificationStatus} | Live: {teacher.is_live ? 'Yes' : 'No'}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderStudents = () => (
     <div className="space-y-6">
@@ -1159,7 +1166,6 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'subjects' && renderSubjects()}
           {activeTab === 'teachers' && renderTeachers()}
-          {activeTab === 'our-team' && renderOurTeam()}
           {activeTab === 'students' && renderStudents()}
           {activeTab === 'verifications' && renderVerifications()}
           {activeTab === 'payments' && renderPayments()}
