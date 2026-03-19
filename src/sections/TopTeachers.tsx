@@ -50,15 +50,15 @@ const TopTeachers: React.FC = () => {
           <div key={teacher.id} className="teacher-card p-6 flex flex-col items-center">
             <img
               src={teacher.profile_picture || '/default-profile.png'}
-              alt={teacher.name}
+              alt={teacher.name || 'Teacher'}
               className="w-24 h-24 rounded-full object-cover mb-4 border-4 border-primary-500/50"
             />
-            <h3 className="text-xl font-bold mb-1 text-[#4a4a4a] font-['Poppins']">{teacher.name}</h3>
+            <h3 className="text-xl font-bold mb-1 text-[#4a4a4a] font-['Poppins']">{teacher.name || 'Teacher'}</h3>
             <div className="text-sm text-gray-600 mb-3 line-clamp-2 text-center h-10">{teacher.bio || 'Expert tutor in selected subjects.'}</div>
             
             <div className="flex flex-wrap gap-2 mt-2 justify-center mb-4">
-              {teacher.subject_names?.map((subject: string) => (
-                <span key={subject} className="px-3 py-1 bg-accent/10 text-accent rounded-full text-xs font-medium">
+              {teacher.subject_names?.filter((s: any) => s && typeof s === 'string').map((subject: string, idx: number) => (
+                <span key={`${subject}-${idx}`} className="px-3 py-1 bg-accent/10 text-accent rounded-full text-xs font-medium">
                   {subject}
                 </span>
               ))}

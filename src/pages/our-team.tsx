@@ -17,14 +17,17 @@ const OurTeam: React.FC = () => {
     teachersAPI.getTop(5)
       .then(data => {
         if (data.success && data.data) {
-          const processedTeachers = data.data.map((t: any) => ({
-            ...t,
-            subject_names: Array.isArray(t.subject_names) 
-              ? t.subject_names 
-              : typeof t.subject_names === 'string' 
-                ? t.subject_names.replace(/[{}]/g, '').split(',').map((s: string) => s.trim()).filter(Boolean)
-                : []
-          }));
+          const processedTeachers = data.data.map((t: any) => {
+            let subjectNames = t.subject_names;
+            if (typeof subjectNames === 'string') {
+              subjectNames = subjectNames.replace(/[{}]/g, '').split(',').map((s: string) => s.trim()).filter(Boolean);
+            }
+            if (!Array.isArray(subjectNames)) {
+              subjectNames = [];
+            }
+            subjectNames = subjectNames.filter((s: any) => s && typeof s === 'string');
+            return { ...t, subject_names: subjectNames };
+          });
           setTeachers(processedTeachers);
         }
       })
@@ -42,10 +45,10 @@ const OurTeam: React.FC = () => {
           <div key={teacher.id} className="bg-white rounded-lg shadow p-6 flex flex-col items-center">
             <img
               src={teacher.profile_picture || '/default-profile.jpg'}
-              alt={teacher.name}
+              alt={teacher.name || 'Teacher'}
               className="w-24 h-24 rounded-full object-cover mb-4 border-2 border-[#f5a623]"
             />
-            <h2 className="text-xl font-semibold mb-1">{teacher.name}</h2>
+            <h2 className="text-xl font-semibold mb-1">{teacher.name || 'Teacher'}</h2>
             <p className="text-sm text-gray-500 mb-2">{teacher.subject_names?.join(', ')}</p>
             <p className="text-gray-700 text-center text-sm">{teacher.bio}</p>
           </div>
