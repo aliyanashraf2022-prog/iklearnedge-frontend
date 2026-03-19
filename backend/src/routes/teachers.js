@@ -369,6 +369,42 @@ router.put('/profile', authenticate, requireTeacher, async (req, res) => {
   }
 });
 
+// @route   GET /api/teachers/availability
+// @desc    Get teacher availability
+// @access  Private/Teacher
+router.get('/availability', authenticate, requireTeacher, async (req, res) => {
+  try {
+    const teacherResult = await query(
+      'SELECT id FROM teachers WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (teacherResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    const teacherId = teacherResult.rows[0].id;
+    const availabilityResult = await query(
+      'SELECT id, day, start_time as "startTime", end_time as "endTime", is_available as "isAvailable" FROM availability WHERE teacher_id = $1 ORDER BY day, start_time',
+      [teacherId]
+    );
+
+    res.json({
+      success: true,
+      data: availabilityResult.rows
+    });
+  } catch (error) {
+    console.error('Get availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get availability'
+    });
+  }
+});
+
 // @route   PUT /api/teachers/availability
 // @desc    Update teacher availability
 // @access  Private/Teacher

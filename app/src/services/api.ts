@@ -124,6 +124,9 @@ export const teachersAPI = {
       body: JSON.stringify({ availability }),
     }),
   
+  getAvailability: () =>
+    apiCall('teachers/availability'),
+  
   getAllAdmin: () =>
     apiCall('teachers/all'),
   
@@ -273,7 +276,14 @@ export const settingsAPI = {
   getBankDetails: () =>
     apiCall('settings/bank-details'),
   
-  updateBankDetails: (data: any) =>
+  updateBankDetails: (data: {
+    bankName?: string;
+    accountNumber?: string;
+    iban?: string;
+    accountHolderName?: string;
+    swiftCode?: string;
+    branchAddress?: string;
+  }) =>
     apiCall('settings/bank-details', {
       method: 'PUT',
       body: JSON.stringify(data),

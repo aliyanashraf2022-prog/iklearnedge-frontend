@@ -36,17 +36,26 @@ const BankDetailsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await settingsAPI.getBankDetails();
-      if (res.success && res.data) {
+      const data = res.data || res;
+      if (data) {
         setBankDetails({
-          bankName: res.data.bankName || '',
-          accountNumber: res.data.accountNumber || '',
-          iban: res.data.iban || '',
-          accountHolderName: res.data.accountHolderName || '',
-          swiftCode: res.data.swiftCode || '',
-          branchAddress: res.data.branchAddress || '',
-          isActive: res.data.isActive ?? true
+          bankName: data.bankName || data.bank_name || '',
+          accountNumber: data.accountNumber || data.account_number || '',
+          iban: data.iban || '',
+          accountHolderName: data.accountHolderName || data.account_holder_name || '',
+          swiftCode: data.swiftCode || data.swift_code || '',
+          branchAddress: data.branchAddress || data.branch_address || '',
+          isActive: data.isActive ?? data.is_active ?? true
         });
-        setOriginalDetails(res.data);
+        setOriginalDetails({
+          bankName: data.bankName || data.bank_name || '',
+          accountNumber: data.accountNumber || data.account_number || '',
+          iban: data.iban || '',
+          accountHolderName: data.accountHolderName || data.account_holder_name || '',
+          swiftCode: data.swiftCode || data.swift_code || '',
+          branchAddress: data.branchAddress || data.branch_address || '',
+          isActive: data.isActive ?? data.is_active ?? true
+        });
       }
     } catch (error) {
       console.error('Error fetching bank details:', error);
@@ -60,11 +69,23 @@ const BankDetailsPage: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
-      await settingsAPI.updateBankDetails(bankDetails);
-      setOriginalDetails(bankDetails);
-      setIsEditing(false);
-      setMessage({ type: 'success', text: 'Bank details saved successfully!' });
+      const result = await settingsAPI.updateBankDetails({
+        bankName: bankDetails.bankName,
+        accountNumber: bankDetails.accountNumber,
+        iban: bankDetails.iban,
+        accountHolderName: bankDetails.accountHolderName,
+        swiftCode: bankDetails.swiftCode,
+        branchAddress: bankDetails.branchAddress
+      });
+      if (result.success) {
+        setOriginalDetails(bankDetails);
+        setIsEditing(false);
+        setMessage({ type: 'success', text: 'Bank details saved successfully!' });
+      } else {
+        throw new Error(result.message || 'Failed to save');
+      }
     } catch (error: any) {
+      console.error('Save error:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to save bank details' });
     } finally {
       setSaving(false);

@@ -121,20 +121,32 @@ const TeacherDashboard: React.FC = () => {
   const handleUploadDocument = async (file: File, type: string) => {
     setUploadingFile(true);
     try {
-      await uploadAPI.uploadDocument(file, type);
-      alert('Document uploaded successfully!');
-      fetchData();
+      const result = await uploadAPI.uploadDocument(file, type);
+      
+      if (result.success && result.data) {
+        alert('Document uploaded successfully!');
+        fetchData();
+      } else {
+        throw new Error(result.message || 'Upload failed');
+      }
     } catch (err: any) {
-      alert('Failed to upload document: ' + err.message);
+      console.error('Document upload error:', err);
+      alert('Failed to upload document: ' + (err.message || 'Please try again'));
     } finally {
       setUploadingFile(false);
     }
   };
 
-  const handleUpdateSchedule = async () => {
-    // Schedule update logic will be implemented
-    alert('Schedule updated!');
-    setIsEditingSchedule(false);
+  const handleUpdateSchedule = async (availability: any[]) => {
+    try {
+      await teachersAPI.updateAvailability(teacher?.id, availability);
+      alert('Schedule updated successfully!');
+      setIsEditingSchedule(false);
+      fetchData();
+    } catch (err: any) {
+      console.error('Schedule update error:', err);
+      alert('Failed to update schedule: ' + (err.message || 'Please try again'));
+    }
   };
 
   const handleUpdateSettings = async () => {
@@ -173,19 +185,23 @@ const TeacherDashboard: React.FC = () => {
   const handleProfilePictureUpload = async (file: File) => {
     setUploadingFile(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const result = await uploadAPI.uploadProfilePicture?.(formData as any) || { url: URL.createObjectURL(file) };
+      const result = await uploadAPI.uploadProfilePicture(file);
+      
+      const newProfilePicture = result.data?.url || result.url;
+      if (!newProfilePicture) {
+        throw new Error('No URL returned from upload');
+      }
       
       await authAPI.updateProfile({
-        profilePicture: result.url || URL.createObjectURL(file)
+        profilePicture: newProfilePicture
       });
       
-      setTeacher({...teacher, profilePicture: result.url});
-      setSettingsForm({...settingsForm, profilePicture: result.url});
+      setTeacher({...teacher, profilePicture: newProfilePicture});
+      setSettingsForm({...settingsForm, profilePicture: newProfilePicture});
       alert('Profile picture updated!');
     } catch (err: any) {
-      alert('Failed to upload profile picture: ' + err.message);
+      console.error('Upload error:', err);
+      alert('Failed to upload profile picture: ' + (err.message || 'Please try again'));
     } finally {
       setUploadingFile(false);
     }

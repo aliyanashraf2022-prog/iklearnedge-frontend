@@ -196,19 +196,23 @@ const StudentDashboard: React.FC = () => {
   const handleProfilePictureUpload = async (file: File) => {
     setUploadingFile(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const result = await uploadAPI.uploadProfilePicture?.(formData as any) || { url: URL.createObjectURL(file) };
+      const result = await uploadAPI.uploadProfilePicture(file);
+      
+      const newProfilePicture = result.data?.url || result.url;
+      if (!newProfilePicture) {
+        throw new Error('No URL returned from upload');
+      }
       
       await authAPI.updateProfile({
-        profilePicture: result.url || URL.createObjectURL(file)
+        profilePicture: newProfilePicture
       });
       
-      setStudent({...student, profilePicture: result.url});
-      setSettingsForm({...settingsForm, profilePicture: result.url});
+      setStudent({...student, profilePicture: newProfilePicture});
+      setSettingsForm({...settingsForm, profilePicture: newProfilePicture});
       alert('Profile picture updated!');
     } catch (err: any) {
-      alert('Failed to upload profile picture: ' + err.message);
+      console.error('Upload error:', err);
+      alert('Failed to upload profile picture: ' + (err.message || 'Please try again'));
     } finally {
       setUploadingFile(false);
     }
@@ -309,6 +313,9 @@ const StudentDashboard: React.FC = () => {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTeachers.map((teacher) => {
           const teacherSubjects = getSubjectNames(teacher.subjects);
+          const truncatedBio = teacher.bio?.length > 100 
+            ? teacher.bio.substring(0, 100) + '...' 
+            : teacher.bio || 'Expert tutor ready to help you succeed!';
           
           return (
             <div 
@@ -336,7 +343,7 @@ const StudentDashboard: React.FC = () => {
                     <span className="text-sm font-medium">4.9</span>
                   </div>
                 </div>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{teacher.bio}</p>
+                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{truncatedBio}</p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {teacherSubjects.slice(0, 3).map((sub: any) => (
                     <span key={sub.id} className="px-2 py-1 bg-[#f5a623]/10 text-[#f5a623] text-xs rounded-full">
@@ -901,8 +908,28 @@ const StudentDashboard: React.FC = () => {
 
             <div className="mb-6">
               <h4 className="font-semibold text-[#4a4a4a] mb-2">About</h4>
-              <p className="text-gray-600">{selectedTeacher.bio}</p>
+              <p className="text-gray-600 whitespace-pre-wrap">{selectedTeacher.bio || 'No bio available.'}</p>
             </div>
+
+            {(selectedTeacher.yearsOfExperience || selectedTeacher.qualifications) && (
+              <div className="mb-6">
+                <h4 className="font-semibold text-[#4a4a4a] mb-3">Qualifications</h4>
+                {selectedTeacher.yearsOfExperience && (
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span className="text-gray-700">
+                      {selectedTeacher.yearsOfExperience} {selectedTeacher.yearsOfExperience === 1 ? 'Year' : 'Years'} of Experience
+                    </span>
+                  </div>
+                )}
+                {selectedTeacher.qualifications && (
+                  <div className="flex items-start space-x-2">
+                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                    <span className="text-gray-700 whitespace-pre-wrap">{selectedTeacher.qualifications}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mb-6">
               <h4 className="font-semibold text-[#4a4a4a] mb-2">Subjects Offered</h4>
@@ -918,13 +945,24 @@ const StudentDashboard: React.FC = () => {
             <div className="mb-6">
               <h4 className="font-semibold text-[#4a4a4a] mb-2">Availability</h4>
               <div className="grid grid-cols-2 gap-2">
-                {selectedTeacher.availability?.map((slot: any) => (
-                  <div key={slot.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
-                    <Clock className="w-4 h-4 text-[#f5a623]" />
-                    <span className="text-sm capitalize">{slot.day}: {slot.startTime}-{slot.endTime}</span>
-                  </div>
-                ))}
+                {selectedTeacher.availability?.length > 0 ? (
+                  selectedTeacher.availability.map((slot: any) => (
+                    <div key={slot.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
+                      <Clock className="w-4 h-4 text-[#f5a623]" />
+                      <span className="text-sm capitalize">{slot.day}: {slot.startTime}-{slot.endTime}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm col-span-2">Contact the teacher for availability.</p>
+                )}
               </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-700">
+                <span className="font-medium">Contact us</span> for pricing information. 
+                Rates vary based on grade level and subject.
+              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
