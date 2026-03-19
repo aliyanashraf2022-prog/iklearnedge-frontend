@@ -148,7 +148,7 @@ const TeacherDashboard: React.FC = () => {
 
   const handleUpdateSchedule = async (availability: any[]) => {
     try {
-      await teachersAPI.updateAvailability(teacher?.id, availability);
+      await teachersAPI.updateAvailability(availability);
       alert('Schedule updated successfully!');
       setIsEditingSchedule(false);
       fetchData();

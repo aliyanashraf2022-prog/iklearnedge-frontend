@@ -303,24 +303,29 @@ export const settingsAPI = {
     }),
 };
 
-// Upload API
+// Upload API - using multipart/form-data
 export const uploadAPI = {
   uploadProfilePicture: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/profile-picture`, {
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
+    const separator = API_BASE_URL.endsWith('/') ? '' : '/';
+    const response = await fetch(`${API_BASE_URL}${separator}upload/profile-picture`, {
       method: 'POST',
       headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
       },
       body: formData,
     });
     
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Upload failed');
+      throw new Error(data.message || `Upload failed: ${response.status}`);
     }
     return data;
   },
@@ -331,17 +336,22 @@ export const uploadAPI = {
     formData.append('type', type);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/document`, {
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
+    const separator = API_BASE_URL.endsWith('/') ? '' : '/';
+    const response = await fetch(`${API_BASE_URL}${separator}upload/document`, {
       method: 'POST',
       headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
       },
       body: formData,
     });
     
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Upload failed');
+      throw new Error(data.message || `Upload failed: ${response.status}`);
     }
     return data;
   },
@@ -352,17 +362,22 @@ export const uploadAPI = {
     formData.append('bookingId', bookingId);
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/upload/payment-proof`, {
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
+    const separator = API_BASE_URL.endsWith('/') ? '' : '/';
+    const response = await fetch(`${API_BASE_URL}${separator}upload/payment-proof`, {
       method: 'POST',
       headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
       },
       body: formData,
     });
     
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Upload failed');
+      throw new Error(data.message || `Upload failed: ${response.status}`);
     }
     return data;
   },
