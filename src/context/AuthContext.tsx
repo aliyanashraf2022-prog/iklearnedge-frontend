@@ -33,9 +33,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchUserProfile = async () => {
     try {
       const response = await authAPI.getMe();
-      // FIX: Handle nested response structure
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
+      // Handle API response: { success, data: { user } }
+      const responseData = response.data || response;
+      if (responseData.user) {
+        setUser(responseData.user);
       } else if (response.user) {
         setUser(response.user);
       }
@@ -52,17 +53,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authAPI.login(credentials.email, credentials.password);
       
-      // FIX: Handle nested API response structure (response.data.data)
+      // Handle API response structure: { success, data: { user, token } }
       const responseData = response.data || response;
       
-      if (responseData.token && responseData.user) {
-        localStorage.setItem('token', responseData.token);
-        setUser(responseData.user);
-        return true;
-      } else if (responseData.data && responseData.data.token && responseData.data.user) {
-        // Handle double-nested structure { data: { user, token } }
+      if (responseData.data?.user && responseData.data?.token) {
         localStorage.setItem('token', responseData.data.token);
         setUser(responseData.data.user);
+        return true;
+      } else if (responseData.user && responseData.token) {
+        localStorage.setItem('token', responseData.token);
+        setUser(responseData.user);
         return true;
       } else {
         throw new Error('Invalid response from server');
@@ -80,23 +80,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authAPI.register(data);
       
-      // FIX: Handle nested API response structure
+      // Handle API response structure: { success, data: { user, token } }
       const responseData = response.data || response;
       
-      if (responseData.token && responseData.user) {
-        localStorage.setItem('token', responseData.token);
-        setUser(responseData.user);
-        return true;
-      } else if (responseData.data && responseData.data.token && responseData.data.user) {
+      if (responseData.data?.user && responseData.data?.token) {
         localStorage.setItem('token', responseData.data.token);
         setUser(responseData.data.user);
+        return true;
+      } else if (responseData.user && responseData.token) {
+        localStorage.setItem('token', responseData.token);
+        setUser(responseData.user);
         return true;
       } else {
         throw new Error('Registration failed');
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
-      setError(errorMessage);
       console.error('Registration error:', err);
       return false;
     }
