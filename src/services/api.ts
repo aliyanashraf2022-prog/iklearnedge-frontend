@@ -273,6 +273,15 @@ export const adminAPI = {
 export const settingsAPI = {
   getAll: () =>
     apiCall('settings'),
+  
+  getBankDetails: () =>
+    apiCall('settings/bank-details'),
+  
+  updateBankDetails: (data: any) =>
+    apiCall('settings/bank-details', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Upload API

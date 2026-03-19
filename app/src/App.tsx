@@ -1,0 +1,204 @@
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Navigation from '@/sections/Navigation';
+import Hero from '@/sections/Hero';
+import HowItWorks from '@/sections/HowItWorks';
+import Testimonials from '@/sections/Testimonials';
+import Subjects from '@/sections/Subjects';
+import DirectorIntro from '@/sections/DirectorIntro';
+import Footer from '@/sections/Footer';
+import AuthModal from '@/components/AuthModal';
+import AdminDashboard from '@/pages/dashboard/AdminDashboard';
+import TeacherDashboard from '@/pages/dashboard/TeacherDashboard';
+import StudentDashboard from '@/pages/dashboard/StudentDashboard';
+import OurTeam from '@/pages/our-team';
+import ContactUs from '@/pages/contact-us';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import './App.css';
+
+// Landing Page Component
+const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => void }> = ({ 
+  onLoginClick, 
+  onRegisterClick 
+}) => {
+  // ...existing code...
+  return (
+    <div className="min-h-screen bg-white">
+      <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
+      <Hero onGetStarted={onRegisterClick} />
+      <HowItWorks />
+      <Testimonials />
+      <Subjects onLoginClick={onLoginClick} />
+      <DirectorIntro 
+        directorName="Rubina Altaf"
+        directorTitle="Director"
+        directorIntro="25+ Years of Experiance in the Field of education"
+        directorImage="/director-image.png"
+      />
+      <Footer />
+    </div>
+  );
+};
+
+// Protected Route Component
+const ProtectedRoute: React.FC<{ 
+  children: React.ReactNode; 
+  allowedRoles?: string[];
+}> = ({ children, allowedRoles }) => {
+  const { user, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Dashboard Router
+const DashboardRouter: React.FC = () => {
+  const { user } = useAuth();
+
+  if (!user) return <Navigate to="/" replace />;
+
+  switch (user.role) {
+    case 'admin':
+      return <AdminDashboard />;
+    case 'teacher':
+      return <TeacherDashboard />;
+    case 'student':
+      return <StudentDashboard />;
+    default:
+      return <Navigate to="/" replace />;
+  }
+};
+
+// Main App Content
+const AppContent: React.FC = () => {
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const { isAuthenticated } = useAuth();
+
+  // Always open modal in correct mode
+  const openLogin = () => {
+    setAuthMode('login');
+    setIsAuthModalOpen(true);
+  };
+
+  const openRegister = () => {
+    setAuthMode('register');
+    setIsAuthModalOpen(true);
+  };
+
+  return (
+      <>
+        <Routes>
+          <Route 
+            path="/" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <LandingPage 
+                  onLoginClick={openLogin} 
+                  onRegisterClick={openRegister} 
+                />
+              )
+            } 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <DashboardRouter />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/teacher" 
+            element={
+              <ProtectedRoute allowedRoles={["teacher"]}>
+                <TeacherDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/student" 
+            element={
+              <ProtectedRoute allowedRoles={["student"]}>
+                <StudentDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/pricing" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading pricing...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/PricingPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/our-team" element={<OurTeam />} />
+          <Route path="/about-us" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/AboutUsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/contact-us" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/ContactUsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/faqs" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/FAQsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/terms" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/TermsPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/privacy" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/PrivacyPage')))}
+            </React.Suspense>
+          } />
+          <Route path="/blog" element={
+            <React.Suspense fallback={<div className="py-8 text-center">Loading blog...</div>}>
+              {React.createElement(React.lazy(() => import('./pages/BlogPage')))}
+            </React.Suspense>
+          } />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+
+        {/* AuthModal always receives correct mode */}
+        <AuthModal 
+          isOpen={isAuthModalOpen} 
+          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authMode}
+        />
+      </>
+  );
+};
+
+// Main App
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;

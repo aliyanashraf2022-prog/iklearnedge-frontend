@@ -7,7 +7,7 @@ import {
   Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI } from '@/services/api';
+import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI, settingsAPI } from '@/services/api';
 import type { Teacher } from '@/types';
 
 const StudentDashboard: React.FC = () => {
@@ -31,6 +31,7 @@ const StudentDashboard: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [bankDetails, setBankDetails] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -93,6 +94,16 @@ const StudentDashboard: React.FC = () => {
       // Fetch student bookings
       const bookingsData = await bookingsAPI.getAll();
       setBookings(bookingsData.data || bookingsData.bookings || []);
+
+      // Fetch bank details
+      try {
+        const bankData = await settingsAPI.getBankDetails();
+        if (bankData.success && bankData.data) {
+          setBankDetails(bankData.data);
+        }
+      } catch (_bankErr) {
+        console.warn('Could not fetch bank details');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -289,7 +300,7 @@ const StudentDashboard: React.FC = () => {
           <Info className="w-5 h-5 text-blue-500" />
           <p className="text-sm text-blue-700">
             <span className="font-medium">Your Grade Level:</span> {student?.gradeLevel || 'Not set'} 
-            <span className="text-blue-600 ml-2">(Prices shown are for your grade)</span>
+            <span className="text-blue-600 ml-2">(Contact us for pricing details)</span>
           </p>
         </div>
       </div>
@@ -298,9 +309,6 @@ const StudentDashboard: React.FC = () => {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTeachers.map((teacher) => {
           const teacherSubjects = getSubjectNames(teacher.subjects);
-          const firstSubjectPrice = teacherSubjects.length > 0 
-            ? getPriceDisplay(teacherSubjects[0].id) 
-            : 20;
           
           return (
             <div 
@@ -336,14 +344,9 @@ const StudentDashboard: React.FC = () => {
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-2xl font-bold text-[#f5a623] font-['Poppins']">${firstSubjectPrice}</span>
-                    <span className="text-sm text-gray-500">/hour</span>
-                    <p className="text-xs text-gray-400">for {student?.gradeLevel}</p>
-                  </div>
-                  <button className="btn-primary text-sm py-2 px-4" title="Book Now">
-                    Book Now
+                <div className="flex items-center justify-end">
+                  <button className="btn-primary text-sm py-2 px-4" title="View Profile">
+                    View Profile
                   </button>
                 </div>
               </div>
@@ -902,20 +905,13 @@ const StudentDashboard: React.FC = () => {
             </div>
 
             <div className="mb-6">
-              <h4 className="font-semibold text-[#4a4a4a] mb-2">Subjects & Pricing</h4>
-              <p className="text-sm text-gray-500 mb-3">
-                Prices shown are for your grade level: <span className="font-medium">{student?.gradeLevel}</span>
-              </p>
-              <div className="space-y-2">
-                {getSubjectNames(selectedTeacher.subjects).map((sub: any) => {
-                  const price = getPriceDisplay(sub.id);
-                  return (
-                    <div key={sub.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-[#4a4a4a]">{sub.name}</span>
-                      <span className="text-lg font-bold text-[#f5a623]">${price}/hour</span>
-                    </div>
-                  );
-                })}
+              <h4 className="font-semibold text-[#4a4a4a] mb-2">Subjects Offered</h4>
+              <div className="flex flex-wrap gap-2">
+                {getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
+                  <span key={sub.id} className="px-3 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-sm">
+                    {sub.name}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -931,15 +927,25 @@ const StudentDashboard: React.FC = () => {
               </div>
             </div>
 
-            <button 
-              onClick={() => {
-                setSelectedTeacher(null);
-                setShowPaymentModal(true);
-              }}
-              className="btn-primary w-full py-3 text-lg"
-            >
-              Book a Class
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button 
+                onClick={() => {
+                  setSelectedTeacher(null);
+                  setShowPaymentModal(true);
+                }}
+                className="btn-primary flex-1 py-3 text-lg flex items-center justify-center space-x-2"
+              >
+                <span>Book a Class</span>
+              </button>
+              <button 
+                onClick={() => {
+                  alert('Demo class booking coming soon! Contact us for more details.');
+                }}
+                className="btn-secondary flex-1 py-3 text-lg flex items-center justify-center space-x-2"
+              >
+                <span>Book a Demo</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1012,9 +1018,10 @@ const StudentDashboard: React.FC = () => {
                 <div>
                   <h4 className="font-semibold text-[#4a4a4a] mb-3">Bank Transfer Details</h4>
                   <div className="bg-blue-50 p-4 rounded-lg space-y-2">
-                    <p className="text-sm"><span className="font-medium">Bank:</span> Dubai Islamic Bank</p>
-                    <p className="text-sm"><span className="font-medium">Account:</span> 1234567890</p>
-                    <p className="text-sm"><span className="font-medium">IBAN:</span> AE123456789012345678901</p>
+                    <p className="text-sm"><span className="font-medium">Bank:</span> {bankDetails?.bankName || 'Not available'}</p>
+                    <p className="text-sm"><span className="font-medium">Account:</span> {bankDetails?.accountNumber || 'Not available'}</p>
+                    <p className="text-sm"><span className="font-medium">IBAN:</span> {bankDetails?.iban || 'Not available'}</p>
+                    <p className="text-sm"><span className="font-medium">Account Holder:</span> {bankDetails?.accountHolderName || 'Not available'}</p>
                     <p className="text-sm"><span className="font-medium">Reference:</span> IKL{Date.now()}</p>
                   </div>
                 </div>

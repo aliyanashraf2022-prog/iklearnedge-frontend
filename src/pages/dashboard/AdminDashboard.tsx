@@ -3,12 +3,13 @@ import {
   LayoutDashboard, Users, UserCheck, CreditCard, 
   Calendar, Settings, LogOut, CheckCircle, XCircle,
   Eye, FileText, Bell, Search, Filter, BookOpen,
-  Plus, Edit2, Trash2, DollarSign, Loader2, Star, User
+  Plus, Edit2, Trash2, DollarSign, Loader2, Star, User, Building2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI } from '@/services/api';
 import type { Teacher, Subject } from '@/types';
+import BankDetailsPage from '@/pages/admin/BankDetailsPage';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
@@ -126,6 +127,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'students', label: 'Students', icon: User },
     { id: 'verifications', label: 'Verifications', icon: UserCheck },
     { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'bank-details', label: 'Bank Details', icon: Building2 },
     { id: 'classes', label: 'Classes', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -1213,6 +1215,7 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'verifications' && renderVerifications()}
           {activeTab === 'payments' && renderPayments()}
           {activeTab === 'users' && renderUsers()}
+          {activeTab === 'bank-details' && <BankDetailsPage />}
           {activeTab === 'classes' && renderClasses()}
           {activeTab === 'settings' && renderSettings()}
         </div>
