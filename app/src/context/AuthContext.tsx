@@ -10,6 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   switchRole: (role: UserRole) => void;
+  updateUser: (data: Partial<User>) => void;
   error: string | null;
 }
 
@@ -114,6 +115,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
+  const updateUser = useCallback((data: Partial<User>) => {
+    if (user) {
+      const updatedUser = { ...user, ...data };
+      setUser(updatedUser);
+      // Also update stored user if you store it separately, but token is the main thing
+    }
+  }, [user]);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -123,6 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated: !!user,
       isLoading,
       switchRole,
+      updateUser,
       error
     }}>
       {children}

@@ -7,7 +7,7 @@ import {
   Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, subjectsAPI, uploadAPI, authAPI, bookingsAPI } from '@/services/api';
+import { teachersAPI, subjectsAPI, uploadAPI, authAPI, bookingsAPI, notificationsAPI } from '@/services/api';
 
 // Helper to normalize booking fields
 const normalizeBooking = (booking: any) => ({
@@ -45,6 +45,9 @@ const TeacherDashboard: React.FC = () => {
   const [demoRequests, setDemoRequests] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -76,7 +79,20 @@ const TeacherDashboard: React.FC = () => {
   // Fetch data on mount
   useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const notificationsData = await notificationsAPI.getAll();
+      setNotifications(notificationsData.data || notificationsData.notifications || []);
+      const countData = await notificationsAPI.getUnreadCount();
+      setUnreadCount(countData.count || countData.unreadCount || 0);
+    } catch (e) {
+      console.warn('Could not fetch notifications');
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -107,6 +123,8 @@ const TeacherDashboard: React.FC = () => {
       } catch (_bookingsErr) {
         setBookings([]);
       }
+      
+      fetchNotifications();
       
       // Fetch demo requests (status = pending_teacher)
       try {
@@ -268,6 +286,58 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationsAPI.markAllAsRead();
+      fetchNotifications();
+    } catch (err: any) {
+      console.error('Failed to mark notifications as read:', err);
+    }
+  };
+
+  const renderNotifications = () => (
+    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+        <h3 className="font-bold text-[#4a4a4a]">Notifications</h3>
+        <button 
+          onClick={handleMarkAllAsRead}
+          className="text-xs text-[#f5a623] hover:underline"
+        >
+          Mark all as read
+        </button>
+      </div>
+      <div className="max-h-96 overflow-y-auto">
+        {notifications.length > 0 ? (
+          notifications.map((notif) => (
+            <div 
+              key={notif.id} 
+              className={`p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}
+              onClick={async () => {
+                if (!notif.read) {
+                  await notificationsAPI.markAsRead(notif.id);
+                  fetchNotifications();
+                }
+              }}
+            >
+              <div className="flex space-x-3">
+                <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!notif.read ? 'bg-blue-500' : 'bg-transparent'}`} />
+                <div className="flex-1">
+                  <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{notif.message}</p>
+                  <p className="text-xs text-gray-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="p-8 text-center text-gray-400">
+            <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
+            <p>No notifications yet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -276,7 +346,11 @@ const TeacherDashboard: React.FC = () => {
     );
   }
 
-  const renderOverview = () => (
+  const renderOverview = () => {
+    const pendingDemos = demoRequests.filter((d: any) => d.status === 'pending_teacher');
+    const confirmedNeedingLink = bookings.filter((b: any) => b.status === 'accepted' && !b.meetingLink);
+
+    return (
     <div className="space-y-6">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-[#f5a623] to-[#e09513] rounded-xl p-6 text-white">
@@ -302,6 +376,71 @@ const TeacherDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Action Center */}
+      {(pendingDemos.length > 0 || confirmedNeedingLink.length > 0) && (
+        <div className="bg-white rounded-xl shadow-lg border-2 border-[#f5a623]/20 overflow-hidden">
+          <div className="bg-[#f5a623]/5 p-4 border-b border-[#f5a623]/10">
+            <h3 className="text-lg font-bold text-[#4a4a4a] flex items-center">
+              <Bell className="w-5 h-5 mr-2 text-[#f5a623]" />
+              Action Center
+            </h3>
+          </div>
+          <div className="p-4 space-y-4">
+            {pendingDemos.map((demo) => (
+              <DemoRequestCard 
+                key={demo.id} 
+                demo={demo} 
+                onAccept={handleAcceptDemo}
+                onDecline={handleDeclineDemo}
+              />
+            ))}
+            {confirmedNeedingLink.map((booking) => (
+              <div key={booking.id} className="bg-white rounded-lg p-4 border border-blue-200">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <p className="font-medium text-[#4a4a4a]">{booking.studentName || 'Student'}</p>
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Paid Class</span>
+                    </div>
+                    <p className="text-sm text-gray-600">{booking.subjectName} • {booking.gradeLevel}</p>
+                    <p className="text-sm font-medium text-blue-600">
+                      {new Date(booking.scheduledDate).toLocaleDateString()} at{' '}
+                      {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                    Verified
+                  </span>
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">Student is waiting for the class link</p>
+                  <div className="flex space-x-2">
+                    <input
+                      type="url"
+                      placeholder="Paste class link (Zoom/Meet)"
+                      className="form-input text-sm"
+                      id={`link-${booking.id}`}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.getElementById(`link-${booking.id}`) as HTMLInputElement;
+                        if (input?.value) {
+                          handleAcceptDemo(booking.id, input.value); // Reusing meeting link update logic
+                        }
+                      }}
+                      className="btn-primary text-sm py-2 px-4 whitespace-nowrap"
+                    >
+                      Create Class
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -452,7 +591,8 @@ const TeacherDashboard: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderSchedule = () => (
     <div className="space-y-6">
@@ -690,20 +830,25 @@ const TeacherDashboard: React.FC = () => {
           </thead>
           <tbody>
             {bookings
-              .filter((b: any) => b.status === 'confirmed' || b.status === 'completed')
+              .filter((b: any) => b.status === 'accepted' || b.status === 'completed')
               .map((booking: any) => (
               <tr key={booking.id}>
                 <td>
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-                      <span className="text-[#f5a623] font-bold">S</span>
+                      <span className="text-[#f5a623] font-bold">
+                        {(booking.studentName || 'S').charAt(0)}
+                      </span>
                     </div>
-                    <span className="font-medium text-[#4a4a4a]">Student #{booking.studentId}</span>
+                    <div>
+                      <span className="font-medium text-[#4a4a4a]">{booking.studentName || 'Student'}</span>
+                      <p className="text-xs text-gray-500">{booking.studentEmail}</p>
+                    </div>
                   </div>
                 </td>
                 <td>{booking.subjectName}</td>
                 <td>{booking.gradeLevel}</td>
-                <td>5</td>
+                <td>{booking.status === 'completed' ? '1' : '0'}</td>
                 <td>{new Date(booking.scheduledDate).toLocaleDateString()}</td>
               </tr>
             ))}
@@ -1074,10 +1219,21 @@ const TeacherDashboard: React.FC = () => {
             {sidebarItems.find(i => i.id === activeTab)?.label}
           </h1>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 hover:bg-gray-100 rounded-full">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-5 h-5 text-gray-600" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full animate-pulse">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifications && renderNotifications()}
+            </div>
           </div>
         </header>
 

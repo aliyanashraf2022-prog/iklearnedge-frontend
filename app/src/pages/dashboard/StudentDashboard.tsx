@@ -4,10 +4,10 @@ import {
   Settings, LogOut, Star,
   Clock, DollarSign, Upload, CheckCircle, XCircle,
   Bell, BookOpen, User, Info, Loader2, Eye, EyeOff,
-  Mail, Phone, User as UserIcon
+  Mail, Phone, User as UserIcon, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI, settingsAPI } from '@/services/api';
+import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI, settingsAPI, notificationsAPI } from '@/services/api';
 import type { Teacher } from '@/types';
 
 // Helper to normalize booking fields (handle both snake_case and camelCase)
@@ -30,7 +30,7 @@ const normalizeBooking = (booking: any) => ({
 });
 
 const StudentDashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('find-teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -53,6 +53,9 @@ const StudentDashboard: React.FC = () => {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [bankDetails, setBankDetails] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -82,7 +85,33 @@ const StudentDashboard: React.FC = () => {
   // Fetch data on mount
   useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const notificationsData = await notificationsAPI.getAll();
+      setNotifications(notificationsData.data || notificationsData.notifications || []);
+      const countData = await notificationsAPI.getUnreadCount();
+      setUnreadCount(countData.count || countData.unreadCount || 0);
+    } catch (e) {
+      console.warn('Could not fetch notifications');
+    }
+  };
+
+  useEffect(() => {
+    if (selectedTeacher) {
+      const subs = getSubjectNames(selectedTeacher.subjects);
+      if (subs.length === 1) {
+        setSelectedBookingSubject(subs[0].id);
+        setSelectedDemoSlot(prev => ({ ...prev, subjectId: subs[0].id }));
+      } else {
+        setSelectedBookingSubject('');
+        setSelectedDemoSlot(null);
+      }
+    }
+  }, [selectedTeacher]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -116,6 +145,8 @@ const StudentDashboard: React.FC = () => {
       const bookingsData = await bookingsAPI.getAll();
       const rawBookings = bookingsData.data || bookingsData.bookings || [];
       setBookings(rawBookings.map(normalizeBooking));
+
+      fetchNotifications();
 
       // Fetch bank details
       try {
@@ -190,6 +221,7 @@ const StudentDashboard: React.FC = () => {
       }
       
       setStudent({...student, ...settingsForm});
+      updateUser({...settingsForm});
       alert('Settings updated successfully!');
     } catch (err: any) {
       alert('Failed to update settings: ' + err.message);
@@ -231,6 +263,7 @@ const StudentDashboard: React.FC = () => {
       
       setStudent({...student, profilePicture: newProfilePicture});
       setSettingsForm({...settingsForm, profilePicture: newProfilePicture});
+      updateUser({profilePicture: newProfilePicture});
       alert('Profile picture updated!');
     } catch (err: any) {
       console.error('Upload error:', err);
@@ -247,17 +280,18 @@ const StudentDashboard: React.FC = () => {
       const pricePerHour = getPriceDisplay(selectedBookingSubject);
       const totalAmount = Math.round((pricePerHour * bookingDuration) / 60);
 
-      await bookingsAPI.create({
+      const response = await bookingsAPI.create({
         teacherId: selectedTeacher.id,
         subjectId: selectedBookingSubject,
         duration: bookingDuration,
         pricePerHour,
         totalAmount,
-        gradeLevel: student?.gradeLevel
+        gradeLevel: student?.gradeLevel,
+        scheduledDate: selectedDemoSlot?.scheduledDate || new Date().toISOString()
       });
 
-      setBookingStep(2);
-      fetchData();
+      setSelectedBooking(normalizeBooking(response.data || response.booking || response));
+      setBookingStep(2); // Move to payment step
     } catch (err: any) {
       alert('Failed to create booking: ' + err.message);
     }
@@ -302,6 +336,58 @@ const StudentDashboard: React.FC = () => {
       alert('Failed to book demo: ' + err.message);
     }
   };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationsAPI.markAllAsRead();
+      fetchNotifications();
+    } catch (err: any) {
+      console.error('Failed to mark notifications as read:', err);
+    }
+  };
+
+  const renderNotifications = () => (
+    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+        <h3 className="font-bold text-[#4a4a4a]">Notifications</h3>
+        <button 
+          onClick={handleMarkAllAsRead}
+          className="text-xs text-[#f5a623] hover:underline"
+        >
+          Mark all as read
+        </button>
+      </div>
+      <div className="max-h-96 overflow-y-auto">
+        {notifications.length > 0 ? (
+          notifications.map((notif) => (
+            <div 
+              key={notif.id} 
+              className={`p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}
+              onClick={async () => {
+                if (!notif.read) {
+                  await notificationsAPI.markAsRead(notif.id);
+                  fetchNotifications();
+                }
+              }}
+            >
+              <div className="flex space-x-3">
+                <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!notif.read ? 'bg-blue-500' : 'bg-transparent'}`} />
+                <div className="flex-1">
+                  <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{notif.message}</p>
+                  <p className="text-xs text-gray-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="p-8 text-center text-gray-400">
+            <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
+            <p>No notifications yet</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -362,40 +448,64 @@ const StudentDashboard: React.FC = () => {
           return (
             <div 
               key={teacher.id} 
-              className="teacher-card bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all cursor-pointer"
+              className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col"
               onClick={() => setSelectedTeacher(teacher)}
             >
-              <div className="relative h-48 bg-gradient-to-br from-[#f5a623]/20 to-[#f5a623]/5">
+              <div className="relative h-52 overflow-hidden">
                 <img 
-                  src={teacher.profilePicture} 
+                  src={teacher.profilePicture || '/default-avatar.png'} 
                   alt={teacher.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="absolute top-4 right-4">
-                  <span className="px-3 py-1 bg-green-500 text-white text-xs font-medium rounded-full">
+                  <span className="px-3 py-1 bg-green-500/90 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-lg">
                     ● Live
                   </span>
                 </div>
+                {teacher.yearsOfExperience && (
+                  <div className="absolute bottom-4 left-4">
+                    <span className="px-2 py-1 bg-white/90 backdrop-blur-sm text-[#4a4a4a] text-[10px] font-bold rounded-md shadow-sm">
+                      {teacher.yearsOfExperience}+ Years Exp.
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-[#4a4a4a] font-['Poppins']">{teacher.name}</h3>
-                  <div className="flex items-center space-x-1">
-                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    <span className="text-sm font-medium">4.9</span>
+              <div className="p-6 flex-1 flex flex-col">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-lg group-hover:text-[#f5a623] transition-colors">{teacher.name}</h3>
+                    <div className="flex items-center space-x-1 mt-0.5">
+                      <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                      <span className="text-xs font-semibold text-gray-600">4.9 (120+)</span>
+                    </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{truncatedBio}</p>
-                <div className="flex flex-wrap gap-2 mb-4">
+                
+                <p className="text-sm text-gray-500 line-clamp-2 mb-4 leading-relaxed">
+                  {truncatedBio}
+                </p>
+                
+                <div className="flex flex-wrap gap-1.5 mb-6">
                   {teacherSubjects.slice(0, 3).map((sub: any) => (
-                    <span key={sub.id} className="px-2 py-1 bg-[#f5a623]/10 text-[#f5a623] text-xs rounded-full">
+                    <span key={sub.id} className="px-2.5 py-1 bg-gray-50 text-gray-600 text-[10px] font-medium rounded-lg border border-gray-100">
                       {sub.name}
                     </span>
                   ))}
+                  {teacherSubjects.length > 3 && (
+                    <span className="px-2.5 py-1 bg-gray-50 text-gray-400 text-[10px] font-medium rounded-lg border border-gray-100">
+                      +{teacherSubjects.length - 3} more
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center justify-end">
-                  <button className="btn-primary text-sm py-2 px-4" title="View Profile">
+                
+                <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
+                  <div className="text-xs text-gray-400">
+                    Starting from <span className="text-[#f5a623] font-bold">AED 40/hr</span>
+                  </div>
+                  <button className="text-sm font-bold text-[#f5a623] hover:text-[#e09513] flex items-center group/btn">
                     View Profile
+                    <ChevronRight className="w-4 h-4 ml-1 group-hover/btn:translate-x-1 transition-transform" />
                   </button>
                 </div>
               </div>
@@ -483,17 +593,29 @@ const StudentDashboard: React.FC = () => {
                     </div>
                   </div>
                   {booking.meetingLink ? (
-                    <a 
-                      href={booking.meetingLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
-                    >
-                      <Video className="w-4 h-4" />
-                      <span>Join</span>
-                    </a>
+                    <div className="flex items-center space-x-2">
+                      <a 
+                        href={booking.meetingLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
+                      >
+                        <Video className="w-4 h-4" />
+                        <span>Join</span>
+                      </a>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(booking.meetingLink);
+                          alert('Link copied to clipboard!');
+                        }}
+                        className="p-2 border border-gray-200 rounded-lg hover:bg-gray-100"
+                        title="Copy Link"
+                      >
+                        <FileText className="w-4 h-4 text-gray-500" />
+                      </button>
+                    </div>
                   ) : (
-                    <span className="text-sm text-gray-500">Waiting for meeting link...</span>
+                    <span className="text-sm text-gray-500 italic">Waiting for meeting link...</span>
                   )}
                 </div>
               );
@@ -954,10 +1076,21 @@ const StudentDashboard: React.FC = () => {
             {sidebarItems.find(i => i.id === activeTab)?.label}
           </h1>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 hover:bg-gray-100 rounded-full">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-5 h-5 text-gray-600" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full animate-pulse">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifications && renderNotifications()}
+            </div>
           </div>
         </header>
 
@@ -1116,11 +1249,14 @@ const StudentDashboard: React.FC = () => {
                 <select 
                   className="form-input"
                   value={selectedDemoSlot?.subjectId || ''}
-                  onChange={(e) => setSelectedDemoSlot({ 
-                    ...selectedDemoSlot, 
-                    subjectId: parseInt(e.target.value),
-                    scheduledDate: selectedDemoSlot?.scheduledDate || new Date().toISOString()
-                  })}
+                  onChange={(e) => {
+                    const subjectId = e.target.value;
+                    setSelectedDemoSlot({ 
+                      ...selectedDemoSlot, 
+                      subjectId: subjectId,
+                      scheduledDate: selectedDemoSlot?.scheduledDate || ''
+                    });
+                  }}
                 >
                   <option value="">Choose a subject</option>
                   {getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
@@ -1130,20 +1266,51 @@ const StudentDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="form-label">Preferred Date & Time</label>
+                <label className="form-label">Available Slots</label>
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-1">
+                  {selectedTeacher.availability?.length > 0 ? (
+                    selectedTeacher.availability.filter((s: any) => s.isAvailable).map((slot: any) => (
+                      <button
+                        key={slot.id}
+                        onClick={() => setSelectedDemoSlot({
+                          ...selectedDemoSlot,
+                          scheduledDate: `${slot.day} ${slot.startTime}-${slot.endTime}`,
+                          slotId: slot.id
+                        })}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                          selectedDemoSlot?.slotId === slot.id 
+                            ? 'bg-[#f5a623]/10 border-[#f5a623] text-[#f5a623]' 
+                            : 'bg-white border-gray-200 hover:border-[#f5a623] text-gray-600'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-sm font-medium capitalize">{slot.day}</span>
+                        </div>
+                        <span className="text-sm">{slot.startTime} - {slot.endTime}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4 bg-gray-50 rounded-lg">
+                      No specific slots set. You can still pick a custom time below.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Or Pick Custom Date & Time</label>
                 <input
                   type="datetime-local"
                   className="form-input"
-                  value={selectedDemoSlot?.scheduledDate?.slice(0, 16) || ''}
+                  value={selectedDemoSlot?.scheduledDate && !selectedDemoSlot?.slotId ? selectedDemoSlot.scheduledDate.slice(0, 16) : ''}
                   onChange={(e) => setSelectedDemoSlot({ 
                     ...selectedDemoSlot, 
+                    slotId: undefined,
                     scheduledDate: new Date(e.target.value).toISOString()
                   })}
                   min={new Date().toISOString().slice(0, 16)}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Times shown in your local timezone
-                </p>
               </div>
 
               <div className="bg-gray-50 rounded-lg p-4">
@@ -1170,13 +1337,24 @@ const StudentDashboard: React.FC = () => {
 
       {/* Payment Upload Modal */}
       {showPaymentModal && (
-        <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          if (bookingStep !== 2) setShowPaymentModal(false);
+        }}>
           <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                {bookingStep === 1 ? 'Upload Payment Proof' : 'Booking Confirmed'}
+                {bookingStep === 1 ? 'Book a Class' : 
+                 bookingStep === 2 ? 'Payment Verification' : 'Booking Successful'}
               </h3>
-              <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button 
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  setBookingStep(1);
+                  setSelectedBookingSubject('');
+                  setSelectedBooking(null);
+                }} 
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
                 <XCircle className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -1196,6 +1374,38 @@ const StudentDashboard: React.FC = () => {
                       <option key={sub.id} value={sub.id}>{sub.name}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* Available Slots */}
+                <div>
+                  <label className="form-label">Select Timing</label>
+                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-1">
+                    {selectedTeacher?.availability?.length > 0 ? (
+                      selectedTeacher.availability.filter((s: any) => s.isAvailable).map((slot: any) => (
+                        <button
+                          key={slot.id}
+                          onClick={() => setSelectedDemoSlot({
+                            ...selectedDemoSlot,
+                            scheduledDate: `${slot.day} ${slot.startTime}-${slot.endTime}`,
+                            slotId: slot.id
+                          })}
+                          className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+                            selectedDemoSlot?.slotId === slot.id 
+                              ? 'bg-[#f5a623]/10 border-[#f5a623] text-[#f5a623]' 
+                              : 'bg-white border-gray-200 hover:border-[#f5a623] text-gray-600'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Clock className="w-3 h-3" />
+                            <span className="text-xs font-medium capitalize">{slot.day}</span>
+                          </div>
+                          <span className="text-xs">{slot.startTime} - {slot.endTime}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-500 text-center py-2">No availability slots set.</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Duration Selection */}
@@ -1225,7 +1435,7 @@ const StudentDashboard: React.FC = () => {
                       <span className="font-medium">{bookingDuration} minutes</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between">
-                      <span className="font-semibold">Total</span>
+                      <span className="font-semibold">Total to Pay</span>
                       <span className="font-bold text-[#f5a623] text-xl">
                         ${Math.round((getPriceForSubjectAndGrade(selectedBookingSubject, student?.gradeLevel) * bookingDuration) / 60)}
                       </span>
@@ -1233,59 +1443,88 @@ const StudentDashboard: React.FC = () => {
                   </div>
                 )}
 
+                <button 
+                  onClick={handleBookClass}
+                  className="btn-primary w-full py-3"
+                  disabled={!selectedBookingSubject || !selectedDemoSlot?.scheduledDate}
+                >
+                  Confirm and Pay
+                </button>
+              </div>
+            ) : bookingStep === 2 ? (
+              <div className="space-y-6">
+                <div className="bg-[#f5a623]/10 border border-[#f5a623]/20 rounded-lg p-4">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm text-gray-600">Total Amount Due</span>
+                    <span className="font-bold text-[#f5a623]">${selectedBooking?.totalAmount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Reference</span>
+                    <span className="font-mono text-xs">IKL-{selectedBooking?.id?.slice(0, 8)}</span>
+                  </div>
+                </div>
+
                 <div>
                   <h4 className="font-semibold text-[#4a4a4a] mb-3">Bank Transfer Details</h4>
-                  <div className="bg-blue-50 p-4 rounded-lg space-y-2">
-                    <p className="text-sm"><span className="font-medium">Bank:</span> {bankDetails?.bankName || 'Not available'}</p>
-                    <p className="text-sm"><span className="font-medium">Account:</span> {bankDetails?.accountNumber || 'Not available'}</p>
-                    <p className="text-sm"><span className="font-medium">IBAN:</span> {bankDetails?.iban || 'Not available'}</p>
-                    <p className="text-sm"><span className="font-medium">Account Holder:</span> {bankDetails?.accountHolderName || 'Not available'}</p>
-                    <p className="text-sm"><span className="font-medium">Reference:</span> IKL{Date.now()}</p>
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-2 border border-blue-100">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-blue-600">Bank Name</span>
+                      <span className="text-sm font-medium">{bankDetails?.bankName || 'HBL Bank'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-blue-600">Account Number</span>
+                      <span className="text-sm font-medium">{bankDetails?.accountNumber || '0042 3456 7890 12'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-blue-600">IBAN</span>
+                      <span className="text-sm font-medium font-mono">{bankDetails?.iban || 'PK89HBL00423456789012'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-blue-600">Account Holder</span>
+                      <span className="text-sm font-medium">{bankDetails?.accountHolderName || 'I-K-LEARN-EDGE'}</span>
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <label className="form-label">Upload Payment Receipt</label>
-                  <label className="file-upload-zone cursor-pointer">
-                    <Upload className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm text-gray-500">Click to upload or drag and drop</p>
-                    <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF up to 5MB</p>
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      onChange={(e) => e.target.files?.[0] && handleUploadPayment(e.target.files[0])}
-                      disabled={uploadingFile || !selectedBookingSubject}
-                    />
-                  </label>
+                  <div className="relative">
+                    <label className={`file-upload-zone cursor-pointer ${uploadingFile ? 'opacity-50' : ''}`}>
+                      <Upload className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm text-gray-500">
+                        {uploadingFile ? 'Uploading...' : 'Click to upload or drag receipt'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF up to 5MB</p>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={(e) => e.target.files?.[0] && handleUploadPayment(e.target.files[0])}
+                        disabled={uploadingFile}
+                      />
+                    </label>
+                  </div>
                 </div>
-
-                <button 
-                  onClick={handleBookClass}
-                  className="btn-primary w-full"
-                  disabled={!selectedBookingSubject}
-                >
-                  Submit for Verification
-                </button>
               </div>
             ) : (
               <div className="text-center py-8">
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="w-10 h-10 text-green-600" />
                 </div>
-                <h4 className="text-xl font-bold text-[#4a4a4a] mb-2">Payment Submitted!</h4>
+                <h4 className="text-xl font-bold text-[#4a4a4a] mb-2">Request Sent!</h4>
                 <p className="text-gray-600 mb-6">
-                  Your payment proof has been uploaded and is under review. You will be notified once confirmed.
+                  Your payment proof has been uploaded. The admin will verify it and confirm your booking shortly.
                 </p>
                 <button 
                   onClick={() => {
                     setShowPaymentModal(false);
                     setBookingStep(1);
                     setSelectedBookingSubject('');
+                    setSelectedBooking(null);
                   }}
-                  className="btn-primary"
+                  className="btn-primary w-full py-3"
                 >
-                  Done
+                  Return to Dashboard
                 </button>
               </div>
             )}
