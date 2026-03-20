@@ -148,10 +148,16 @@ const TeacherDashboard: React.FC = () => {
 
   const handleUpdateSchedule = async (availability: any[]) => {
     try {
-      await teachersAPI.updateAvailability(availability);
-      alert('Schedule updated successfully!');
-      setIsEditingSchedule(false);
-      fetchData();
+      const result = await teachersAPI.updateAvailability(availability);
+      
+      // Only show success if backend returns success
+      if (result && result.success) {
+        alert('Schedule updated successfully!');
+        setIsEditingSchedule(false);
+        fetchData();
+      } else {
+        throw new Error(result?.message || 'Failed to update schedule');
+      }
     } catch (err: any) {
       console.error('Schedule update error:', err);
       alert('Failed to update schedule: ' + (err.message || 'Please try again'));

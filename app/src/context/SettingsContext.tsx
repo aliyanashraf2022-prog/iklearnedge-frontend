@@ -74,9 +74,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     return settings.currency_symbol || 'د.إ';
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | string | undefined | null) => {
     const symbol = getCurrencySymbol();
-    return `${symbol} ${amount.toFixed(2)}`;
+    const numAmount = typeof amount === 'number' ? amount : parseFloat(amount as string) || 0;
+    return `${symbol} ${numAmount.toFixed(2)}`;
   };
 
   return (

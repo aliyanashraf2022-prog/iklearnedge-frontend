@@ -502,12 +502,16 @@ const AdminDashboard: React.FC = () => {
               <div className="bg-gray-50 rounded-lg p-3 mb-4">
                 <p className="text-xs font-medium text-gray-500 mb-2">PRICING TIERS</p>
                 <div className="space-y-1">
-                  {subject.pricingTiers?.slice(0, 3).map((tier) => (
-                    <div key={tier.id} className="flex justify-between text-sm">
-                      <span className="text-gray-600">{tier.gradeLevel}</span>
-                      <span className="font-medium text-[#f5a623]">{formatCurrency(tier.pricePerHour).replace(settings.currency_symbol, '')} {settings.currency_symbol}/hr</span>
-                    </div>
-                  ))}
+                  {subject.pricingTiers && subject.pricingTiers.length > 0 ? (
+                    subject.pricingTiers.slice(0, 3).map((tier) => (
+                      <div key={tier?.id || Math.random()} className="flex justify-between text-sm">
+                        <span className="text-gray-600">{tier?.gradeLevel || 'Standard'}</span>
+                        <span className="font-medium text-[#f5a623]">{formatCurrency(tier?.pricePerHour || 0).replace(settings?.currency_symbol || 'د.إ', '')} {settings?.currency_symbol || 'د.إ'}/hr</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-400">No pricing set</p>
+                  )}
                   {(subject.pricingTiers?.length || 0) > 3 && (
                     <p className="text-xs text-gray-400">+{(subject.pricingTiers?.length || 0) - 3} more tiers</p>
                   )}

@@ -5,6 +5,15 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 async function apiCall(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   
+  // Check if this is a protected endpoint (not auth-related)
+  const isProtectedEndpoint = !endpoint.startsWith('auth/login') && !endpoint.startsWith('auth/register');
+  
+  // Block requests without token for protected endpoints
+  if (isProtectedEndpoint && !token) {
+    console.error('API call blocked: No authentication token found');
+    throw new Error('Authentication required. Please login again.');
+  }
+  
   // Ensure single slash between base URL and endpoint
   const separator = API_BASE_URL.endsWith('/') || endpoint.startsWith('/') ? '' : '/';
   
@@ -20,7 +29,15 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || 'API call failed');
+    // Handle specific error cases
+    if (response.status === 401 || response.status === 403) {
+      // Token expired or invalid - clear token and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/';
+      throw new Error(data.message || 'Session expired. Please login again.');
+    }
+    throw new Error(data.message || `Request failed with status ${response.status}`);
   }
 
   return data;

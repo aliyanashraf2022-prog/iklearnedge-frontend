@@ -35,6 +35,14 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const fetchSettings = async () => {
     try {
+      const baseUrl = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
+      const sameOrigin = !!baseUrl && typeof window !== 'undefined' && baseUrl.startsWith(window.location.origin);
+
+      if (!sameOrigin) {
+        setLoading(false);
+        return;
+      }
+
       const response = await settingsAPI.getAll();
       if (response.data) {
         setSettings({
@@ -52,7 +60,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         document.documentElement.style.setProperty('--accent-color', response.data.accent_color || defaultSettings.accent_color);
       }
     } catch (error) {
-      console.error('Failed to fetch settings:', error);
+      // Silent fallback to defaults in preview/offline
     } finally {
       setLoading(false);
     }
@@ -66,9 +74,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     return settings.currency_symbol || 'د.إ';
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | string | undefined | null) => {
     const symbol = getCurrencySymbol();
-    return `${symbol} ${amount.toFixed(2)}`;
+    const numAmount = typeof amount === 'number' ? amount : parseFloat(amount as string) || 0;
+    return `${symbol} ${numAmount.toFixed(2)}`;
   };
 
   return (
