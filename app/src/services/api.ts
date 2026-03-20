@@ -224,6 +224,17 @@ export const bookingsAPI = {
     apiCall(`bookings/${id}/demo`, {
       method: 'DELETE',
     }),
+
+  verifyPayment: (id: string) =>
+    apiCall(`bookings/${id}/verify-payment`, {
+      method: 'PUT',
+    }),
+
+  getPendingAdmin: () =>
+    apiCall('bookings/pending-admin'),
+
+  getByTeacher: () =>
+    apiCall('bookings/teacher'),
 };
 
 // Payments API

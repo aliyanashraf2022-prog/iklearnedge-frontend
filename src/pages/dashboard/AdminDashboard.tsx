@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI } from '@/services/api';
+import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI, bookingsAPI } from '@/services/api';
 import type { Teacher, Subject } from '@/types';
 import BankDetailsPage from '@/pages/admin/BankDetailsPage';
 
@@ -25,6 +25,7 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [pendingAdminBookings, setPendingAdminBookings] = useState<any[]>([]);
   const [pendingVerifications, setPendingVerifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -140,6 +141,14 @@ const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error('Failed to fetch payments:', err);
     }
+
+    // Fetch pending admin bookings (status = pending_admin)
+    try {
+      const pendingAdminData = await bookingsAPI.getPendingAdmin();
+      setPendingAdminBookings(pendingAdminData.data || pendingAdminData.bookings || []);
+    } catch (err) {
+      console.error('Failed to fetch pending admin bookings:', err);
+    }
     
     setIsLoading(false);
   };
@@ -199,6 +208,27 @@ const AdminDashboard: React.FC = () => {
       fetchData(); // Refresh data
     } catch (err: any) {
       alert('Failed to approve payment: ' + err.message);
+    }
+  };
+
+  const handleVerifyBookingPayment = async (bookingId: string) => {
+    try {
+      await bookingsAPI.verifyPayment(bookingId);
+      alert(`Booking payment verified! The teacher can now add meeting link.`);
+      fetchData(); // Refresh data
+    } catch (err: any) {
+      alert('Failed to verify payment: ' + err.message);
+    }
+  };
+
+  const handleRejectBookingPayment = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to reject this payment?')) return;
+    try {
+      await bookingsAPI.updateStatus(bookingId, 'rejected');
+      alert(`Payment rejected!`);
+      fetchData(); // Refresh data
+    } catch (err: any) {
+      alert('Failed to reject payment: ' + err.message);
     }
   };
 
@@ -651,48 +681,109 @@ const AdminDashboard: React.FC = () => {
     <div className="space-y-6">
       <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Payment Verifications</h3>
       
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>Payment ID</th>
-              <th>Student</th>
-              <th>Teacher</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pendingPayments.map((payment: any) => (
-              <tr key={payment.id}>
-                <td>#{payment.id}</td>
-                <td>{payment.studentName || 'Unknown'}</td>
-                <td>{payment.teacherName || 'Unknown'}</td>
-                <td>
-                  <div>
-                    <p className="font-medium">AED {payment.amount}</p>
-                  </div>
-                </td>
-                <td>
-                  <span className={`badge badge-pending`}>
-                    {payment.status}
-                  </span>
-                </td>
-                <td>
+      {/* Pending Admin Bookings Section */}
+      {pendingAdminBookings.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h4 className="font-semibold text-[#4a4a4a] mb-4 flex items-center">
+            <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
+            Pending Admin Verification ({pendingAdminBookings.length})
+          </h4>
+          <div className="space-y-4">
+            {pendingAdminBookings.map((booking: any) => (
+              <div key={booking.id} className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div>
+                  <p className="font-medium text-[#4a4a4a]">
+                    {booking.subject_name || booking.subjectName} - Class #{booking.id}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Student: {booking.student_name || booking.studentName || 'Unknown'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Teacher: {booking.teacher_name || booking.teacherName || 'Unknown'}
+                  </p>
+                  <p className="text-sm font-medium text-[#f5a623]">
+                    Amount: AED {booking.total_amount || booking.totalAmount}
+                  </p>
+                  {booking.receipt_url && (
+                    <a href={booking.receipt_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                      View Payment Receipt
+                    </a>
+                  )}
+                </div>
+                <div className="flex space-x-2">
                   <button 
-                    onClick={() => setSelectedBooking(payment)}
-                    className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                    onClick={() => handleVerifyBookingPayment(booking.id)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 flex items-center space-x-1"
                   >
-                    <Eye className="w-4 h-4" />
-                    <span>Review</span>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Verify</span>
                   </button>
-                </td>
-              </tr>
+                  <button 
+                    onClick={() => handleRejectBookingPayment(booking.id)}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 flex items-center space-x-1"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy Payments Section */}
+      {pendingPayments.length > 0 && (
+        <div className="data-table">
+          <h4 className="font-semibold text-[#4a4a4a] mb-4">Legacy Payments</h4>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th>Payment ID</th>
+                <th>Student</th>
+                <th>Teacher</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingPayments.map((payment: any) => (
+                <tr key={payment.id}>
+                  <td>#{payment.id}</td>
+                  <td>{payment.studentName || 'Unknown'}</td>
+                  <td>{payment.teacherName || 'Unknown'}</td>
+                  <td>
+                    <div>
+                      <p className="font-medium">AED {payment.amount}</p>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`badge badge-pending`}>
+                      {payment.status}
+                    </span>
+                  </td>
+                  <td>
+                    <button 
+                      onClick={() => setSelectedBooking(payment)}
+                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Review</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pendingAdminBookings.length === 0 && pendingPayments.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          No pending payments to verify
+        </div>
+      )}
     </div>
   );
 

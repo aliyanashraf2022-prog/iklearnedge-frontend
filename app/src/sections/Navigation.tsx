@@ -140,7 +140,6 @@ const Navigation: React.FC<NavigationProps> = ({ onLoginClick, onRegisterClick }
             )}
             {user ? (
               <div className="flex items-center space-x-3">
-                <button onClick={() => alert('Bell clicked!')}>🔔</button>
                 <NotificationBell />
                 <span className="text-sm text-[#4a4a4a]">Welcome, {user.name}</span>
                 <button 

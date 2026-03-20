@@ -7,7 +7,7 @@ import {
   Mail, Phone, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, subjectsAPI, uploadAPI, authAPI } from '@/services/api';
+import { teachersAPI, subjectsAPI, uploadAPI, authAPI, bookingsAPI } from '@/services/api';
 
 const TeacherDashboard: React.FC = () => {
   const { logout } = useAuth();
@@ -78,11 +78,15 @@ const TeacherDashboard: React.FC = () => {
       const subjectsData = await subjectsAPI.getAll();
       setSubjects(subjectsData.data || subjectsData.subjects || []);
 
-      // Fetch bookings will be implemented when we have the endpoint
-      // For now, use mock data or empty array
-      setBookings([]);
+      // Fetch teacher's bookings
+      try {
+        const bookingsData = await bookingsAPI.getByTeacher();
+        setBookings(bookingsData.data || bookingsData.bookings || []);
+      } catch (_bookingsErr) {
+        setBookings([]);
+      }
       
-      // Fetch demo requests
+      // Fetch demo requests (status = pending_teacher)
       try {
         const demoData = await bookingsAPI.getDemoRequests();
         setDemoRequests(demoData.data || demoData || []);
@@ -93,8 +97,8 @@ const TeacherDashboard: React.FC = () => {
       // Stats
       setStats({
         totalStudents: 0,
-        upcomingClasses: 0,
-        completedClasses: 0,
+        upcomingClasses: bookings.filter((b: any) => b.status === 'accepted').length,
+        completedClasses: bookings.filter((b: any) => b.status === 'completed').length,
         totalEarnings: 0
       });
     } catch (err: any) {
@@ -345,7 +349,7 @@ const TeacherDashboard: React.FC = () => {
         
         <div className="space-y-3">
           {bookings
-            .filter((b: any) => b.status === 'confirmed')
+            .filter((b: any) => b.status === 'accepted')
             .slice(0, 3)
             .map((booking: any) => (
             <div key={booking.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -359,19 +363,26 @@ const TeacherDashboard: React.FC = () => {
                     {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                   <p className="text-xs text-[#f5a623]">${booking.pricePerHour}/hour • {booking.gradeLevel}</p>
+                  {booking.is_demo && (
+                    <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
+                  )}
                 </div>
               </div>
-              <a 
-                href={booking.meetingLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary text-sm py-2 px-4"
-              >
-                Join
-              </a>
+              {booking.meetingLink ? (
+                <a 
+                  href={booking.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary text-sm py-2 px-4"
+                >
+                  Join
+                </a>
+              ) : (
+                <span className="text-sm text-gray-500">Waiting for link...</span>
+              )}
             </div>
           ))}
-          {bookings.filter((b: any) => b.status === 'confirmed').length === 0 && (
+          {bookings.filter((b: any) => b.status === 'accepted').length === 0 && (
             <p className="text-center text-gray-500 py-4">No upcoming classes</p>
           )}
         </div>
@@ -497,75 +508,90 @@ const TeacherDashboard: React.FC = () => {
   }> = ({ demo, onAccept, onDecline }) => {
     const [meetingLink, setMeetingLink] = useState('');
     const [showAcceptForm, setShowAcceptForm] = useState(false);
+    const isPending = demo.status === 'pending_teacher';
 
     return (
       <div className="bg-white rounded-lg p-4 border border-yellow-200">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="font-medium text-[#4a4a4a]">{demo.student_name || 'New Student'}</p>
-            <p className="text-sm text-gray-600">{demo.student_email}</p>
-            <p className="text-sm text-gray-500">{demo.subject_name}</p>
+            <p className="font-medium text-[#4a4a4a]">{demo.student_name || demo.studentName || 'New Student'}</p>
+            <p className="text-sm text-gray-600">{demo.student_email || demo.studentEmail}</p>
+            <p className="text-sm text-gray-500">{demo.subject_name || demo.subjectName}</p>
             <p className="text-sm font-medium text-[#f5a623]">
-              {new Date(demo.scheduled_date).toLocaleDateString()} at{' '}
-              {new Date(demo.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleDateString()} at{' '}
+              {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
+            {demo.is_demo && (
+              <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
+            )}
           </div>
-          <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
-            Pending
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+            isPending ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+          }`}>
+            {isPending ? 'Pending' : 'Confirmed'}
           </span>
         </div>
 
-        {showAcceptForm ? (
-          <div className="space-y-2">
-            <input
-              type="url"
-              placeholder="Paste Zoom or Google Meet link"
-              value={meetingLink}
-              onChange={(e) => setMeetingLink(e.target.value)}
-              className="form-input text-sm"
-            />
+        {isPending && (
+          showAcceptForm ? (
+            <div className="space-y-2">
+              <input
+                type="url"
+                placeholder="Paste Zoom or Google Meet link"
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+                className="form-input text-sm"
+              />
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => {
+                    onAccept(demo.id, meetingLink);
+                    setShowAcceptForm(false);
+                  }}
+                  disabled={!meetingLink.trim()}
+                  className="flex-1 btn-primary text-sm py-2"
+                >
+                  Confirm & Send Link
+                </button>
+                <button
+                  onClick={() => setShowAcceptForm(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
             <div className="flex space-x-2">
               <button
-                onClick={() => {
-                  onAccept(demo.id, meetingLink);
-                  setShowAcceptForm(false);
-                }}
-                disabled={!meetingLink.trim()}
+                onClick={() => setShowAcceptForm(true)}
                 className="flex-1 btn-primary text-sm py-2"
               >
-                Confirm & Send Link
+                Accept
               </button>
               <button
-                onClick={() => setShowAcceptForm(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+                onClick={() => onDecline(demo.id)}
+                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
               >
-                Cancel
+                Decline
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setShowAcceptForm(true)}
-              className="flex-1 btn-primary text-sm py-2"
-            >
-              Accept
-            </button>
-            <button
-              onClick={() => onDecline(demo.id)}
-              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
-            >
-              Decline
-            </button>
-          </div>
+          )
+        )}
+        
+        {!isPending && demo.meeting_link && (
+          <a href={demo.meeting_link || demo.meetingLink} target="_blank" rel="noopener noreferrer" className="btn-primary text-sm py-2 inline-flex items-center space-x-2">
+            <Video className="w-4 h-4" />
+            <span>Join Meeting</span>
+          </a>
         )}
       </div>
     );
   };
 
   const renderStudents = () => {
-    const pendingDemos = demoRequests.filter((d: any) => d.status === 'demo_pending');
-    const confirmedDemos = demoRequests.filter((d: any) => d.status === 'demo_confirmed');
+    const pendingDemos = demoRequests.filter((d: any) => d.status === 'pending_teacher');
+    const confirmedDemos = demoRequests.filter((d: any) => d.status === 'accepted');
     
     return (
     <div className="space-y-6">
@@ -604,13 +630,13 @@ const TeacherDashboard: React.FC = () => {
                   <div key={demo.id} className="bg-white rounded-lg p-4 border border-green-200">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-[#4a4a4a]">{demo.student_name || 'Student'}</p>
-                        <p className="text-sm text-gray-600">{demo.subject_name}</p>
+                        <p className="font-medium text-[#4a4a4a]">{demo.student_name || demo.studentName || 'Student'}</p>
+                        <p className="text-sm text-gray-600">{demo.subject_name || demo.subjectName}</p>
                         <p className="text-sm text-gray-500">
-                          {new Date(demo.scheduled_date).toLocaleDateString()} at {new Date(demo.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleDateString()} at {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                        {demo.meeting_link && (
-                          <a href={demo.meeting_link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                        {(demo.meeting_link || demo.meetingLink) && (
+                          <a href={demo.meeting_link || demo.meetingLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
                             Join Meeting
                           </a>
                         )}

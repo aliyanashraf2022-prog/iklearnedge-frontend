@@ -14,6 +14,7 @@ import StudentDashboard from '@/pages/dashboard/StudentDashboard';
 import OurTeam from '@/pages/our-team';
 import ContactUs from '@/pages/contact-us';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 import './App.css';
 
 // Landing Page Component
@@ -194,9 +195,11 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
+      <NotificationProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

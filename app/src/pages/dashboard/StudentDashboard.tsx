@@ -249,9 +249,9 @@ const StudentDashboard: React.FC = () => {
     setUploadingFile(true);
     try {
       await uploadAPI.uploadPaymentProof(file, selectedBooking.id);
-      await bookingsAPI.updateStatus(selectedBooking.id, 'pending_payment');
+      await bookingsAPI.updateStatus(selectedBooking.id, 'pending_admin');
       
-      alert('Payment proof uploaded successfully!');
+      alert('Payment proof uploaded successfully! The admin will verify your payment.');
       setShowPaymentModal(false);
       setBookingStep(1);
       setSelectedBookingSubject('');
@@ -414,7 +414,7 @@ const StudentDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="stat-label">Upcoming Classes</p>
-              <p className="stat-value text-[#f5a623]">{bookings.filter((b: any) => b.status === 'confirmed').length}</p>
+              <p className="stat-value text-[#f5a623]">{bookings.filter((b: any) => b.status === 'accepted').length}</p>
             </div>
             <div className="w-14 h-14 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
               <Calendar className="w-7 h-7 text-[#f5a623]" />
@@ -440,7 +440,7 @@ const StudentDashboard: React.FC = () => {
         <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Upcoming Classes</h3>
         <div className="space-y-3">
           {bookings
-            .filter((b: any) => b.status === 'confirmed')
+            .filter((b: any) => b.status === 'accepted')
             .map((booking: any) => {
               const teacher = teachers.find(t => t.id === booking.teacherId);
               return (
@@ -457,21 +457,28 @@ const StudentDashboard: React.FC = () => {
                         {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                       <p className="text-xs text-[#f5a623]">${booking.pricePerHour}/hour • {booking.gradeLevel}</p>
+                      {booking.is_demo && (
+                        <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
+                      )}
                     </div>
                   </div>
-                  <a 
-                    href={booking.meetingLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
-                  >
-                    <Video className="w-4 h-4" />
-                    <span>Join</span>
-                  </a>
+                  {booking.meetingLink ? (
+                    <a 
+                      href={booking.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
+                    >
+                      <Video className="w-4 h-4" />
+                      <span>Join</span>
+                    </a>
+                  ) : (
+                    <span className="text-sm text-gray-500">Waiting for meeting link...</span>
+                  )}
                 </div>
               );
             })}
-          {bookings.filter((b: any) => b.status === 'confirmed').length === 0 && (
+          {bookings.filter((b: any) => b.status === 'accepted').length === 0 && (
             <p className="text-center text-gray-500 py-4">No upcoming classes</p>
           )}
         </div>
@@ -504,12 +511,15 @@ const StudentDashboard: React.FC = () => {
                     <td>${booking.totalAmount}</td>
                     <td>
                       <span className={`badge ${
-                        booking.status === 'confirmed' ? 'badge-approved' :
-                        booking.status === 'pending_payment' ? 'badge-pending' :
+                        booking.status === 'accepted' ? 'badge-approved' :
+                        booking.status === 'pending_teacher' ? 'badge-pending' :
+                        booking.status === 'pending_admin' ? 'bg-yellow-100 text-yellow-700' :
                         booking.status === 'completed' ? 'bg-purple-100 text-purple-700' :
                         'badge-rejected'
                       }`}>
-                        {booking.status}
+                        {booking.status === 'pending_teacher' ? 'Awaiting Teacher' :
+                         booking.status === 'pending_admin' ? 'Payment Review' :
+                         booking.status}
                       </span>
                     </td>
                   </tr>
@@ -531,7 +541,7 @@ const StudentDashboard: React.FC = () => {
         <h4 className="font-semibold text-[#4a4a4a] mb-4">Pending Payments</h4>
         <div className="space-y-3">
           {bookings
-            .filter((b: any) => b.status === 'pending_payment')
+            .filter((b: any) => b.status === 'pending_admin')
             .map((booking: any) => {
               const teacher = teachers.find(t => t.id === booking.teacherId);
               return (
@@ -555,8 +565,58 @@ const StudentDashboard: React.FC = () => {
                 </div>
               );
             })}
-          {bookings.filter((b: any) => b.status === 'pending_payment').length === 0 && (
+          {bookings.filter((b: any) => b.status === 'pending_admin').length === 0 && (
             <p className="text-center text-gray-500 py-4">No pending payments</p>
+          )}
+        </div>
+      </div>
+
+      {/* Demo Classes Section */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h4 className="font-semibold text-[#4a4a4a] mb-4">Demo Classes</h4>
+        <div className="space-y-3">
+          {bookings
+            .filter((b: any) => b.is_demo)
+            .map((booking: any) => {
+              const teacher = teachers.find(t => t.id === booking.teacherId);
+              return (
+                <div key={booking.id} className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <p className="font-medium text-[#4a4a4a]">{booking.subjectName} with {teacher?.name}</p>
+                      <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full">Demo</span>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <p className={`text-sm ${
+                      booking.status === 'pending_teacher' ? 'text-yellow-600' :
+                      booking.status === 'accepted' ? 'text-green-600' :
+                      'text-gray-500'
+                    }`}>
+                      {booking.status === 'pending_teacher' ? 'Waiting for teacher confirmation...' :
+                       booking.status === 'accepted' ? 'Confirmed!' :
+                       booking.status}
+                    </p>
+                  </div>
+                  {booking.meetingLink ? (
+                    <a 
+                      href={booking.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
+                    >
+                      <Video className="w-4 h-4" />
+                      <span>Join</span>
+                    </a>
+                  ) : booking.status === 'pending_teacher' ? (
+                    <span className="text-sm text-yellow-600">Awaiting...</span>
+                  ) : null}
+                </div>
+              );
+            })}
+          {bookings.filter((b: any) => b.is_demo).length === 0 && (
+            <p className="text-center text-gray-500 py-4">No demo classes booked</p>
           )}
         </div>
       </div>
@@ -577,7 +637,7 @@ const StudentDashboard: React.FC = () => {
             </thead>
             <tbody>
               {bookings
-                .filter((b: any) => b.status === 'confirmed' || b.status === 'completed')
+                .filter((b: any) => b.status === 'accepted' || b.status === 'completed')
                 .map((booking: any) => (
                 <tr key={booking.id}>
                   <td>#{booking.id}</td>

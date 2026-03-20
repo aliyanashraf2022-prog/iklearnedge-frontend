@@ -14,7 +14,7 @@ import StudentDashboard from '@/pages/dashboard/StudentDashboard';
 import OurTeam from '@/pages/our-team';
 import ContactUs from '@/pages/contact-us';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { SettingsProvider } from '@/context/SettingsContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 import './App.css';
 
 // Landing Page Component
@@ -22,6 +22,7 @@ const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => v
   onLoginClick, 
   onRegisterClick 
 }) => {
+  // ...existing code...
   return (
     <div className="min-h-screen bg-white">
       <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
@@ -193,13 +194,13 @@ const AppContent: React.FC = () => {
 // Main App
 function App() {
   return (
-    <SettingsProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <NotificationProvider>
         <Router>
           <AppContent />
         </Router>
-      </AuthProvider>
-    </SettingsProvider>
+      </NotificationProvider>
+    </AuthProvider>
   );
 }
 
