@@ -11,6 +11,28 @@ import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI, bookingsA
 import type { Teacher, Subject } from '@/types';
 import BankDetailsPage from '@/pages/admin/BankDetailsPage';
 
+// Helper to normalize booking fields
+const normalizeBooking = (booking: any) => ({
+  ...booking,
+  teacherId: booking.teacher_id || booking.teacherId,
+  studentId: booking.student_id || booking.studentId,
+  subjectId: booking.subject_id || booking.subjectId,
+  scheduledDate: booking.scheduled_date || booking.scheduledDate,
+  pricePerHour: booking.price_per_hour || booking.pricePerHour,
+  totalAmount: booking.total_amount || booking.totalAmount,
+  meetingLink: booking.meeting_link || booking.meetingLink,
+  gradeLevel: booking.grade_level || booking.gradeLevel,
+  isDemo: booking.is_demo ?? booking.isDemo,
+  receiptUrl: booking.receipt_url || booking.receiptUrl,
+  createdAt: booking.created_at || booking.createdAt,
+  studentName: booking.student_name || booking.studentName,
+  studentEmail: booking.student_email || booking.studentEmail,
+  teacherName: booking.teacher_name || booking.teacherName,
+  teacherEmail: booking.teacher_email || booking.teacherEmail,
+  subjectName: booking.subject_name || booking.subjectName,
+  status: booking.status,
+});
+
 const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
   const { formatCurrency } = useSettings();
@@ -145,7 +167,8 @@ const AdminDashboard: React.FC = () => {
     // Fetch pending admin bookings (status = pending_admin)
     try {
       const pendingAdminData = await bookingsAPI.getPendingAdmin();
-      setPendingAdminBookings(pendingAdminData.data || pendingAdminData.bookings || []);
+      const rawBookings = pendingAdminData.data || pendingAdminData.bookings || [];
+      setPendingAdminBookings(rawBookings.map(normalizeBooking));
     } catch (err) {
       console.error('Failed to fetch pending admin bookings:', err);
     }

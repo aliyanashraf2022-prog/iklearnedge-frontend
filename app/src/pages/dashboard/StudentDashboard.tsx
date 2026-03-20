@@ -10,6 +10,25 @@ import { useAuth } from '@/context/AuthContext';
 import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI, settingsAPI } from '@/services/api';
 import type { Teacher } from '@/types';
 
+// Helper to normalize booking fields (handle both snake_case and camelCase)
+const normalizeBooking = (booking: any) => ({
+  ...booking,
+  teacherId: booking.teacher_id || booking.teacherId,
+  studentId: booking.student_id || booking.studentId,
+  subjectId: booking.subject_id || booking.subjectId,
+  scheduledDate: booking.scheduled_date || booking.scheduledDate,
+  pricePerHour: booking.price_per_hour || booking.pricePerHour,
+  totalAmount: booking.total_amount || booking.totalAmount,
+  meetingLink: booking.meeting_link || booking.meetingLink,
+  gradeLevel: booking.grade_level || booking.gradeLevel,
+  isDemo: booking.is_demo ?? booking.isDemo,
+  receiptUrl: booking.receipt_url || booking.receiptUrl,
+  createdAt: booking.created_at || booking.createdAt,
+  status: booking.status,
+  subjectName: booking.subject_name || booking.subjectName,
+  teacherName: booking.teacher_name || booking.teacherName,
+});
+
 const StudentDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('find-teachers');
@@ -95,7 +114,8 @@ const StudentDashboard: React.FC = () => {
 
       // Fetch student bookings
       const bookingsData = await bookingsAPI.getAll();
-      setBookings(bookingsData.data || bookingsData.bookings || []);
+      const rawBookings = bookingsData.data || bookingsData.bookings || [];
+      setBookings(rawBookings.map(normalizeBooking));
 
       // Fetch bank details
       try {
@@ -249,7 +269,7 @@ const StudentDashboard: React.FC = () => {
     setUploadingFile(true);
     try {
       await uploadAPI.uploadPaymentProof(file, selectedBooking.id);
-      await bookingsAPI.updateStatus(selectedBooking.id, 'pending_admin');
+      // Backend already updates status to 'pending_admin' after upload
       
       alert('Payment proof uploaded successfully! The admin will verify your payment.');
       setShowPaymentModal(false);

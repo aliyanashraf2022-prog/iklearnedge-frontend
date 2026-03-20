@@ -2,18 +2,38 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck, X, Calendar, User, CreditCard, MessageSquare, Video } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 
+interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  is_read: boolean;
+  isRead: boolean;
+  created_at: string;
+  createdAt: string;
+}
+
 const NotificationBell: React.FC = () => {
   const { 
-    notifications, 
-    unreadCount, 
+    notifications: rawNotifications, 
+    unreadCount: rawUnreadCount, 
     isLoading, 
     fetchNotifications, 
-    markAsRead, 
-    markAllAsRead, 
-    deleteNotification 
+    markAsRead: rawMarkAsRead, 
+    markAllAsRead: rawMarkAllAsRead, 
+    deleteNotification: rawDeleteNotification 
   } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Normalize notifications to handle both snake_case and camelCase
+  const notifications: Notification[] = rawNotifications.map(n => ({
+    ...n,
+    is_read: n.is_read ?? n.isRead,
+    created_at: n.created_at || n.createdAt,
+  }));
+
+  const unreadCount = rawUnreadCount;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -28,6 +48,18 @@ const NotificationBell: React.FC = () => {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, fetchNotifications]);
+
+  const handleMarkAsRead = (id: number) => {
+    rawMarkAsRead(id);
+  };
+
+  const handleMarkAllAsRead = () => {
+    rawMarkAllAsRead();
+  };
+
+  const handleDelete = (id: number) => {
+    rawDeleteNotification(id);
+  };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -98,7 +130,7 @@ const NotificationBell: React.FC = () => {
             <div className="flex items-center space-x-2">
               {unreadCount > 0 && (
                 <button
-                  onClick={markAllAsRead}
+                  onClick={handleMarkAllAsRead}
                   className="text-sm text-[#f5a623] hover:text-[#d99520] flex items-center space-x-1"
                 >
                   <CheckCheck className="w-4 h-4" />
@@ -135,7 +167,7 @@ const NotificationBell: React.FC = () => {
                   }`}
                   onClick={() => {
                     if (!notification.is_read) {
-                      markAsRead(notification.id);
+                      handleMarkAsRead(notification.id);
                     }
                   }}
                 >
@@ -162,7 +194,7 @@ const NotificationBell: React.FC = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              markAsRead(notification.id);
+                              handleMarkAsRead(notification.id);
                             }}
                             className="text-xs text-[#f5a623] hover:text-[#d99520] flex items-center space-x-1"
                           >
@@ -173,7 +205,7 @@ const NotificationBell: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteNotification(notification.id);
+                            handleDelete(notification.id);
                           }}
                           className="text-xs text-gray-400 hover:text-red-500 flex items-center space-x-1"
                         >

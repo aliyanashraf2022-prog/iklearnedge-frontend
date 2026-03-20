@@ -9,6 +9,26 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { teachersAPI, subjectsAPI, uploadAPI, authAPI, bookingsAPI } from '@/services/api';
 
+// Helper to normalize booking fields
+const normalizeBooking = (booking: any) => ({
+  ...booking,
+  teacherId: booking.teacher_id || booking.teacherId,
+  studentId: booking.student_id || booking.studentId,
+  subjectId: booking.subject_id || booking.subjectId,
+  scheduledDate: booking.scheduled_date || booking.scheduledDate,
+  pricePerHour: booking.price_per_hour || booking.pricePerHour,
+  totalAmount: booking.total_amount || booking.totalAmount,
+  meetingLink: booking.meeting_link || booking.meetingLink,
+  gradeLevel: booking.grade_level || booking.gradeLevel,
+  isDemo: booking.is_demo ?? booking.isDemo,
+  receiptUrl: booking.receipt_url || booking.receiptUrl,
+  createdAt: booking.created_at || booking.createdAt,
+  studentName: booking.student_name || booking.studentName,
+  studentEmail: booking.student_email || booking.studentEmail,
+  subjectName: booking.subject_name || booking.subjectName,
+  status: booking.status,
+});
+
 const TeacherDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -79,9 +99,11 @@ const TeacherDashboard: React.FC = () => {
       setSubjects(subjectsData.data || subjectsData.subjects || []);
 
       // Fetch teacher's bookings
+      let normalizedBookings: any[] = [];
       try {
         const bookingsData = await bookingsAPI.getByTeacher();
-        setBookings(bookingsData.data || bookingsData.bookings || []);
+        normalizedBookings = (bookingsData.data || bookingsData.bookings || []).map(normalizeBooking);
+        setBookings(normalizedBookings);
       } catch (_bookingsErr) {
         setBookings([]);
       }
@@ -89,16 +111,16 @@ const TeacherDashboard: React.FC = () => {
       // Fetch demo requests (status = pending_teacher)
       try {
         const demoData = await bookingsAPI.getDemoRequests();
-        setDemoRequests(demoData.data || demoData || []);
+        setDemoRequests((demoData.data || demoData || []).map(normalizeBooking));
       } catch (_demoErr) {
         setDemoRequests([]);
       }
       
       // Stats
       setStats({
-        totalStudents: 0,
-        upcomingClasses: bookings.filter((b: any) => b.status === 'accepted').length,
-        completedClasses: bookings.filter((b: any) => b.status === 'completed').length,
+        totalStudents: normalizedBookings.filter((b: any) => b.status === 'accepted').length,
+        upcomingClasses: normalizedBookings.filter((b: any) => b.status === 'accepted').length,
+        completedClasses: normalizedBookings.filter((b: any) => b.status === 'completed').length,
         totalEarnings: 0
       });
     } catch (err: any) {
