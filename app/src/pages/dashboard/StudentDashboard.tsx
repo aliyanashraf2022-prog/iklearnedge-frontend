@@ -1,1537 +1,1031 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Search, Calendar, Video, 
-  Settings, LogOut, Star,
-  Clock, DollarSign, Upload, CheckCircle, XCircle,
-  Bell, BookOpen, User, Info, Loader2, Eye, EyeOff,
-  Mail, Phone, User as UserIcon, ChevronRight
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  CalendarDays,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  Loader2,
+  Save,
+  Search,
+  Settings,
+  Upload,
+  Users,
+  Video,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, studentsAPI, subjectsAPI, bookingsAPI, uploadAPI, authAPI, settingsAPI, notificationsAPI } from '@/services/api';
-import type { Teacher } from '@/types';
+import {
+  authAPI,
+  bookingsAPI,
+  paymentsAPI,
+  settingsAPI,
+  studentsAPI,
+  subjectsAPI,
+  teachersAPI,
+  uploadAPI,
+} from '@/services/api';
+import type { Booking, Student, Subject, Teacher } from '@/types';
 
-// Helper to normalize booking fields (handle both snake_case and camelCase)
-const normalizeBooking = (booking: any) => ({
-  ...booking,
-  teacherId: booking.teacher_id || booking.teacherId,
-  studentId: booking.student_id || booking.studentId,
-  subjectId: booking.subject_id || booking.subjectId,
-  scheduledDate: booking.scheduled_date || booking.scheduledDate,
-  pricePerHour: booking.price_per_hour || booking.pricePerHour,
-  totalAmount: booking.total_amount || booking.totalAmount,
-  meetingLink: booking.meeting_link || booking.meetingLink,
-  gradeLevel: booking.grade_level || booking.gradeLevel,
-  isDemo: booking.is_demo ?? booking.isDemo,
-  receiptUrl: booking.receipt_url || booking.receiptUrl,
-  createdAt: booking.created_at || booking.createdAt,
-  status: booking.status,
-  subjectName: booking.subject_name || booking.subjectName,
-  teacherName: booking.teacher_name || booking.teacherName,
+const NAV_ITEMS = [
+  { id: 'find-teachers', label: 'Find Teachers', icon: Search },
+  { id: 'my-classes', label: 'Upcoming Classes', icon: CalendarDays },
+  { id: 'my-teachers', label: 'My Teachers', icon: Users },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'profile', label: 'Profile', icon: Settings },
+] as const;
+
+const dayToIndex: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+const normalizeGradeLevel = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (/^grade\s*[1-5]$/.test(normalized)) {
+    return 'Grade 1-5 (Primary)';
+  }
+
+  if (/^grade\s*[6-8]$/.test(normalized)) {
+    return 'Grade 6-8 (Middle)';
+  }
+
+  if (normalized === 'grade 9' || normalized === 'grade 10') {
+    return 'Grade 9-10 (Secondary)';
+  }
+
+  return value;
+};
+
+const toLocalInputValue = (value: string | Date) => {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
+};
+
+const formatDateTime = (value: string) => new Date(value).toLocaleString([], {
+  dateStyle: 'medium',
+  timeStyle: 'short',
 });
 
+const getStatusClasses = (status: Booking['status']) => {
+  switch (status) {
+    case 'accepted':
+      return 'bg-green-100 text-green-700';
+    case 'pending_admin':
+      return 'bg-amber-100 text-amber-700';
+    case 'pending_teacher':
+      return 'bg-blue-100 text-blue-700';
+    case 'completed':
+      return 'bg-slate-200 text-slate-700';
+    case 'rejected':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+};
+
+const Panel: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children,
+}) => (
+  <section className="rounded-3xl bg-white p-6 shadow-sm">
+    <div className="mb-4">
+      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+      {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+const StatCard: React.FC<{ label: string; value: string | number; hint?: string }> = ({ label, value, hint }) => (
+  <div className="rounded-3xl bg-white p-5 shadow-sm">
+    <p className="text-sm text-slate-500">{label}</p>
+    <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>
+    {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
+  </div>
+);
+
 const StudentDashboard: React.FC = () => {
-  const { logout, updateUser } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('find-teachers');
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showDemoModal, setShowDemoModal] = useState(false);
-  const [bookingStep, setBookingStep] = useState(1);
-  const [selectedBookingSubject, setSelectedBookingSubject] = useState<string>('');
-  const [selectedDemoSlot, setSelectedDemoSlot] = useState<any>(null);
-  const [bookingDuration, setBookingDuration] = useState<number>(60);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  // Data states
-  const [student, setStudent] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [bankDetails, setBankDetails] = useState<any>(null);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  
-  // Settings form state
-  const [settingsForm, setSettingsForm] = useState({
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [myTeachers, setMyTeachers] = useState<Teacher[]>([]);
+  const [bankDetails, setBankDetails] = useState({
+    bankName: '',
+    accountNumber: '',
+    iban: '',
+    accountHolderName: '',
+    swiftCode: '',
+    branchAddress: '',
+    isActive: true,
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [bookingMode, setBookingMode] = useState<'demo' | 'paid' | null>(null);
+  const [bookingForm, setBookingForm] = useState({
+    subjectId: '',
+    scheduledDate: '',
+    duration: 60,
+    notes: '',
+    receiptFile: null as File | null,
+  });
+  const [profileForm, setProfileForm] = useState({
     name: '',
-    email: '',
-    phoneNumber: '',
     gradeLevel: '',
-    profilePicture: ''
+    parentContact: '',
+    location: '',
   });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
 
-  const sidebarItems = [
-    { id: 'find-teachers', label: 'Find Teachers', icon: Search },
-    { id: 'my-classes', label: 'My Classes', icon: Calendar },
-    { id: 'my-teachers', label: 'My Teachers', icon: User },
-    { id: 'payments', label: 'Payments', icon: DollarSign },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const [studentProfile, teacherList, subjectList, bookingList, teacherHistory, bank] = await Promise.all([
+        studentsAPI.getProfile(),
+        teachersAPI.getAll(),
+        subjectsAPI.getAll(),
+        bookingsAPI.getAll(),
+        studentsAPI.getMyTeachers(),
+        settingsAPI.getBankDetails(),
+      ]);
 
-  // Fetch data on mount
+      setStudent(studentProfile);
+      setTeachers(teacherList);
+      setSubjects(subjectList);
+      setBookings(bookingList);
+      setMyTeachers(teacherHistory);
+      setBankDetails(bank);
+      setProfileForm({
+        name: studentProfile.name || '',
+        gradeLevel: normalizeGradeLevel(studentProfile.gradeLevel || ''),
+        parentContact: studentProfile.parentContact || '',
+        location: studentProfile.location || '',
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Failed to load student dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
-    return () => clearInterval(interval);
+    loadDashboard();
   }, []);
 
-  const fetchNotifications = async () => {
-    try {
-      const notificationsData = await notificationsAPI.getAll();
-      setNotifications(notificationsData.data || notificationsData.notifications || []);
-      const countData = await notificationsAPI.getUnreadCount();
-      setUnreadCount(countData.count || countData.unreadCount || 0);
-    } catch (e) {
-      console.warn('Could not fetch notifications');
-    }
-  };
-
-  useEffect(() => {
-    if (selectedTeacher) {
-      const subs = getSubjectNames(selectedTeacher.subjects);
-      if (subs.length === 1) {
-        setSelectedBookingSubject(subs[0].id);
-        setSelectedDemoSlot(prev => ({ ...prev, subjectId: subs[0].id }));
-      } else {
-        setSelectedBookingSubject('');
-        setSelectedDemoSlot(null);
-      }
-    }
-  }, [selectedTeacher]);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Fetch student profile
-      const studentData = await studentsAPI.getProfile();
-      setStudent(studentData.student);
-      setSettingsForm({
-        name: studentData.student?.name || '',
-        email: studentData.student?.email || '',
-        phoneNumber: studentData.student?.phoneNumber || '',
-        gradeLevel: studentData.student?.gradeLevel || '',
-        profilePicture: studentData.student?.profilePicture || ''
-      });
-
-      // Fetch teachers (fallback to public top list if generic endpoint not available)
-      try {
-        const teachersData = await teachersAPI.getAll();
-        setTeachers(teachersData.data || teachersData.teachers || []);
-      } catch (_e) {
-        const top = await teachersAPI.getTop(50);
-        setTeachers(top.data || []);
+  const filteredTeachers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return teachers.filter((teacher) => {
+      if (!teacher.isLive || teacher.verificationStatus !== 'approved') {
+        return false;
       }
 
-      // Fetch subjects
-      const subjectsData = await subjectsAPI.getAll();
-      setSubjects(subjectsData.data || subjectsData.subjects || []);
-
-      // Fetch student bookings
-      const bookingsData = await bookingsAPI.getAll();
-      const rawBookings = bookingsData.data || bookingsData.bookings || [];
-      setBookings(rawBookings.map(normalizeBooking));
-
-      fetchNotifications();
-
-      // Fetch bank details
-      try {
-        const bankData = await settingsAPI.getBankDetails();
-        if (bankData.success && bankData.data) {
-          setBankDetails(bankData.data);
-        }
-      } catch (_bankErr) {
-        console.warn('Could not fetch bank details');
+      if (!query) {
+        return true;
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch data');
-      console.error('Error fetching data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  // Filter teachers based on search and subject
-  const filteredTeachers = teachers
-    .filter(t => t.isLive && t.verificationStatus === 'approved')
-    .filter(t => {
-      const subjectIds: string[] = Array.isArray(t.subjects)
-        ? t.subjects.map((it: any) => (typeof it === 'object' && it !== null ? it.id : it))
-        : [];
-      const matchesSearch =
-        t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        subjectIds.some((sid: string) => {
-          const sub = subjects.find((subj: any) => subj.id === sid);
-          return sub?.name?.toLowerCase().includes(searchQuery.toLowerCase());
-        });
-      const matchesSubject = !selectedSubject || subjectIds.includes(selectedSubject);
-      return matchesSearch && matchesSubject;
+      const subjectNames = teacher.subjects.map((subject) => subject.name.toLowerCase()).join(' ');
+      return teacher.name.toLowerCase().includes(query)
+        || teacher.bio.toLowerCase().includes(query)
+        || subjectNames.includes(query);
     });
+  }, [searchQuery, teachers]);
 
-  // Get subject names from IDs or objects
-  const getSubjectNames = (items: any[] = []) => {
-    return items
-      .map((it) => {
-        const id = typeof it === 'object' && it !== null ? (it.id ?? it) : it;
-        const nameFromObj = typeof it === 'object' && it !== null ? it.name : undefined;
-        const subject = subjects.find((s: any) => s.id === id);
-        return { id, name: nameFromObj || subject?.name || (typeof id === 'string' ? id : '') };
-      })
-      .filter((x) => x.name);
+  const selectedSubject = useMemo(
+    () => subjects.find((subject) => subject.id === bookingForm.subjectId) || null,
+    [bookingForm.subjectId, subjects],
+  );
+
+  const selectedPrice = useMemo(() => {
+    if (!selectedSubject || !student?.gradeLevel) {
+      return 0;
+    }
+
+    const gradeLevel = normalizeGradeLevel(student.gradeLevel || '');
+    return selectedSubject.pricingTiers.find((tier) => tier.gradeLevel === gradeLevel)?.pricePerHour || 0;
+  }, [selectedSubject, student?.gradeLevel]);
+
+  const totalAmount = Math.round((selectedPrice * bookingForm.duration) / 60);
+
+  const upcomingBookings = useMemo(
+    () => bookings
+      .filter((booking) => booking.status === 'accepted')
+      .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()),
+    [bookings],
+  );
+
+  const pendingBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === 'pending_admin' || booking.status === 'pending_teacher'),
+    [bookings],
+  );
+
+  const paidBookings = useMemo(
+    () => bookings.filter((booking) => !booking.isDemo),
+    [bookings],
+  );
+
+  const resetBookingModal = () => {
+    setSelectedTeacher(null);
+    setBookingMode(null);
+    setBookingForm({
+      subjectId: '',
+      scheduledDate: '',
+      duration: 60,
+      notes: '',
+      receiptFile: null,
+    });
   };
 
-  // Get price for a subject based on student's grade
-  const getPriceForSubjectAndGrade = (subjectId: string, gradeLevel: string) => {
-    const subject = subjects.find((s: any) => s.id === subjectId);
-    if (!subject || !subject.pricingTiers) return 20;
-    const tier = subject.pricingTiers.find((t: any) => t.gradeLevel === gradeLevel);
-    return tier?.pricePerHour || 20;
+  const nextOccurrenceForSlot = (day: string, startTime: string) => {
+    const target = new Date();
+    const targetDay = dayToIndex[day] ?? 0;
+    const dayOffset = (targetDay - target.getDay() + 7) % 7;
+    target.setDate(target.getDate() + dayOffset);
+    const [hours, minutes] = startTime.split(':').map(Number);
+    target.setHours(hours, minutes, 0, 0);
+    if (target.getTime() <= Date.now()) {
+      target.setDate(target.getDate() + 7);
+    }
+    return toLocalInputValue(target);
   };
 
-  const getPriceDisplay = (subjectId: string) => {
-    return getPriceForSubjectAndGrade(subjectId, student?.gradeLevel);
+  const openBookingModal = (teacher: Teacher, mode: 'demo' | 'paid') => {
+    const defaultSubjectId = teacher.subjects[0]?.id || '';
+    const defaultSlot = teacher.availability.find((slot) => slot.isAvailable);
+    setSelectedTeacher(teacher);
+    setBookingMode(mode);
+    setBookingForm({
+      subjectId: defaultSubjectId,
+      scheduledDate: defaultSlot ? nextOccurrenceForSlot(defaultSlot.day, defaultSlot.startTime) : '',
+      duration: 60,
+      notes: '',
+      receiptFile: null,
+    });
   };
 
-  const handleUpdateSettings = async () => {
+  const handleProfileSave = async () => {
+    if (!student) {
+      return;
+    }
+
     try {
-      await authAPI.updateProfile({
-        name: settingsForm.name,
-        email: settingsForm.email,
-        phoneNumber: settingsForm.phoneNumber
+      setSaving(true);
+      const updatedUser = await authAPI.updateProfile({ name: profileForm.name });
+      const updatedStudent = await studentsAPI.updateProfile({
+        gradeLevel: profileForm.gradeLevel,
+        parentContact: profileForm.parentContact,
+        location: profileForm.location,
       });
-      
-      if (settingsForm.gradeLevel) {
-        await studentsAPI.updateProfile({
-          gradeLevel: settingsForm.gradeLevel
-        });
-      }
-      
-      setStudent({...student, ...settingsForm});
-      updateUser({...settingsForm});
-      alert('Settings updated successfully!');
-    } catch (err: any) {
-      alert('Failed to update settings: ' + err.message);
+
+      updateUser(updatedUser);
+      setStudent({
+        ...updatedStudent,
+        profilePicture: updatedUser.profilePicture || updatedStudent.profilePicture,
+      });
+      toast.success('Profile updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleChangePassword = async () => {
+  const handlePasswordChange = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('New passwords do not match!');
+      toast.error('New passwords do not match');
       return;
     }
+
     if (passwordForm.newPassword.length < 6) {
-      alert('Password must be at least 6 characters long!');
+      toast.error('Password must be at least 6 characters');
       return;
     }
+
     try {
+      setSaving(true);
       await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setIsChangingPassword(false);
-      alert('Password changed successfully!');
-    } catch (err: any) {
-      alert('Failed to change password: ' + err.message);
+      toast.success('Password updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleProfilePictureUpload = async (file: File) => {
-    setUploadingFile(true);
     try {
-      const result = await uploadAPI.uploadProfilePicture(file);
-      
-      const newProfilePicture = result.data?.url || result.url;
-      if (!newProfilePicture) {
-        throw new Error('No URL returned from upload');
-      }
-      
-      await authAPI.updateProfile({
-        profilePicture: newProfilePicture
-      });
-      
-      setStudent({...student, profilePicture: newProfilePicture});
-      setSettingsForm({...settingsForm, profilePicture: newProfilePicture});
-      updateUser({profilePicture: newProfilePicture});
-      alert('Profile picture updated!');
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      alert('Failed to upload profile picture: ' + (err.message || 'Please try again'));
+      setUploadingPicture(true);
+      const uploaded = await uploadAPI.uploadProfilePicture(file);
+      const updatedUser = await authAPI.updateProfile({ profilePicture: uploaded.url });
+      updateUser(updatedUser);
+      setStudent((current) => current ? { ...current, profilePicture: updatedUser.profilePicture || uploaded.url } : current);
+      toast.success('Profile picture updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload profile picture');
     } finally {
-      setUploadingFile(false);
+      setUploadingPicture(false);
     }
   };
 
-  const handleBookClass = async () => {
-    if (!selectedTeacher || !selectedBookingSubject) return;
-
-    try {
-      const pricePerHour = getPriceDisplay(selectedBookingSubject);
-      const totalAmount = Math.round((pricePerHour * bookingDuration) / 60);
-
-      const response = await bookingsAPI.create({
-        teacherId: selectedTeacher.id,
-        subjectId: selectedBookingSubject,
-        duration: bookingDuration,
-        pricePerHour,
-        totalAmount,
-        gradeLevel: student?.gradeLevel,
-        scheduledDate: selectedDemoSlot?.scheduledDate || new Date().toISOString()
-      });
-
-      setSelectedBooking(normalizeBooking(response.data || response.booking || response));
-      setBookingStep(2); // Move to payment step
-    } catch (err: any) {
-      alert('Failed to create booking: ' + err.message);
+  const handleDemoBooking = async () => {
+    if (!selectedTeacher || !bookingForm.subjectId || !bookingForm.scheduledDate) {
+      toast.error('Choose a subject and preferred time first');
+      return;
     }
-  };
 
-  const handleUploadPayment = async (file: File) => {
-    if (!selectedBooking) return;
-    
-    setUploadingFile(true);
     try {
-      await uploadAPI.uploadPaymentProof(file, selectedBooking.id);
-      // Backend already updates status to 'pending_admin' after upload
-      
-      alert('Payment proof uploaded successfully! The admin will verify your payment.');
-      setShowPaymentModal(false);
-      setBookingStep(1);
-      setSelectedBookingSubject('');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to upload payment: ' + err.message);
-    } finally {
-      setUploadingFile(false);
-    }
-  };
-
-  const handleBookDemo = async () => {
-    if (!selectedTeacher || !selectedDemoSlot) return;
-    
-    try {
+      setSaving(true);
       await bookingsAPI.createDemo({
         teacherId: selectedTeacher.id,
-        subjectId: selectedDemoSlot.subjectId,
-        scheduledDate: selectedDemoSlot.scheduledDate
+        subjectId: bookingForm.subjectId,
+        scheduledDate: new Date(bookingForm.scheduledDate).toISOString(),
       });
-      
-      alert('Demo class requested! The teacher will respond shortly.');
-      setShowDemoModal(false);
-      setSelectedDemoSlot(null);
-      setSelectedTeacher(null);
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to book demo: ' + err.message);
+      toast.success('Demo request sent to the teacher');
+      resetBookingModal();
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to request demo class');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleMarkAllAsRead = async () => {
+  const handlePaidBooking = async () => {
+    if (!selectedTeacher || !bookingForm.subjectId || !bookingForm.scheduledDate) {
+      toast.error('Choose a subject and preferred time first');
+      return;
+    }
+
+    if (!selectedPrice) {
+      toast.error('No pricing tier is configured for your grade level and subject');
+      return;
+    }
+
+    if (!bookingForm.receiptFile) {
+      toast.error('Upload the payment receipt before submitting');
+      return;
+    }
+
     try {
-      await notificationsAPI.markAllAsRead();
-      fetchNotifications();
-    } catch (err: any) {
-      console.error('Failed to mark notifications as read:', err);
+      setSaving(true);
+      const booking = await bookingsAPI.create({
+        teacherId: selectedTeacher.id,
+        subjectId: bookingForm.subjectId,
+        scheduledDate: new Date(bookingForm.scheduledDate).toISOString(),
+        duration: bookingForm.duration,
+        notes: bookingForm.notes,
+      });
+
+      const upload = await uploadAPI.uploadPaymentProof(bookingForm.receiptFile, booking.id);
+      await paymentsAPI.uploadProof({
+        bookingId: booking.id,
+        fileUrl: upload.url,
+        fileName: upload.fileName,
+      });
+
+      toast.success('Class request submitted for admin verification');
+      resetBookingModal();
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit class request');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const renderNotifications = () => (
-    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 overflow-hidden">
-      <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-        <h3 className="font-bold text-[#4a4a4a]">Notifications</h3>
-        <button 
-          onClick={handleMarkAllAsRead}
-          className="text-xs text-[#f5a623] hover:underline"
-        >
-          Mark all as read
-        </button>
-      </div>
-      <div className="max-h-96 overflow-y-auto">
-        {notifications.length > 0 ? (
-          notifications.map((notif) => (
-            <div 
-              key={notif.id} 
-              className={`p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}
-              onClick={async () => {
-                if (!notif.read) {
-                  await notificationsAPI.markAsRead(notif.id);
-                  fetchNotifications();
-                }
-              }}
-            >
-              <div className="flex space-x-3">
-                <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!notif.read ? 'bg-blue-500' : 'bg-transparent'}`} />
-                <div className="flex-1">
-                  <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{notif.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="p-8 text-center text-gray-400">
-            <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
-            <p>No notifications yet</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const copyMeetingLink = async (link: string) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success('Class link copied');
+    } catch {
+      toast.error('Failed to copy class link');
+    }
+  };
 
-  if (isLoading) {
+  if (loading || !student || !user) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-10 h-10 animate-spin text-[#f5a623]" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-[#f5a623]" />
       </div>
     );
   }
 
   const renderFindTeachers = () => (
-    <div className="space-y-6">
-      {/* Search and Filter */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name or subject..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="form-input pl-10 w-full"
-            />
-          </div>
-          <label htmlFor="subject-select" className="sr-only">Select Subject</label>
-          <select
-            id="subject-select"
-            value={selectedSubject}
-            onChange={(e) => setSelectedSubject(e.target.value)}
-            className="form-input md:w-56"
-            title="Select Subject"
-          >
-            <option value="">All Subjects</option>
-            {subjects.filter((s: any) => s.isActive).map((s: any) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-        
-        {/* Student's Grade Info */}
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-center space-x-2">
-          <Info className="w-5 h-5 text-blue-500" />
-          <p className="text-sm text-blue-700">
-            <span className="font-medium">Your Grade Level:</span> {student?.gradeLevel || 'Not set'} 
-            <span className="text-blue-600 ml-2">(Contact us for pricing details)</span>
-          </p>
-        </div>
+    <>
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard label="Available Teachers" value={filteredTeachers.length} hint="Verified teachers ready for booking" />
+        <StatCard label="Pending Requests" value={pendingBookings.length} hint="Awaiting admin or teacher action" />
+        <StatCard label="Upcoming Classes" value={upcomingBookings.length} hint="Accepted classes with links and schedules" />
       </div>
 
-      {/* Teachers Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTeachers.map((teacher) => {
-          const teacherSubjects = getSubjectNames(teacher.subjects);
-          const truncatedBio = teacher.bio?.length > 100 
-            ? teacher.bio.substring(0, 100) + '...' 
-            : teacher.bio || 'Expert tutor ready to help you succeed!';
-          
-          return (
-            <div 
-              key={teacher.id} 
-              className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col"
-              onClick={() => setSelectedTeacher(teacher)}
-            >
-              <div className="relative h-52 overflow-hidden">
-                <img 
-                  src={teacher.profilePicture || '/default-avatar.png'} 
-                  alt={teacher.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute top-4 right-4">
-                  <span className="px-3 py-1 bg-green-500/90 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-lg">
-                    ● Live
-                  </span>
-                </div>
-                {teacher.yearsOfExperience && (
-                  <div className="absolute bottom-4 left-4">
-                    <span className="px-2 py-1 bg-white/90 backdrop-blur-sm text-[#4a4a4a] text-[10px] font-bold rounded-md shadow-sm">
-                      {teacher.yearsOfExperience}+ Years Exp.
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-lg group-hover:text-[#f5a623] transition-colors">{teacher.name}</h3>
-                    <div className="flex items-center space-x-1 mt-0.5">
-                      <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                      <span className="text-xs font-semibold text-gray-600">4.9 (120+)</span>
+      <Panel title="Find Teachers" description="Search by tutor name, subject, or teaching summary.">
+        <div className="relative mb-6">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search teachers or subjects"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-11 py-3 text-sm outline-none ring-0 transition focus:border-[#f5a623] focus:bg-white"
+          />
+        </div>
+
+        {filteredTeachers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-12 text-center text-sm text-slate-500">
+            No teachers matched your search.
+          </div>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-2">
+            {filteredTeachers.map((teacher) => (
+              <article key={teacher.id} className="rounded-3xl border border-slate-200 p-5">
+                <div className="flex flex-col gap-5 md:flex-row">
+                  <img
+                    src={teacher.profilePicture || '/default-avatar.png'}
+                    alt={teacher.name}
+                    className="h-24 w-24 rounded-3xl object-cover"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-xl font-semibold text-slate-950">{teacher.name}</h3>
+                        <p className="mt-1 text-sm text-slate-500">{teacher.bio || 'Experienced tutor available for live classes.'}</p>
+                      </div>
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                        Live
+                      </span>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {teacher.subjects.map((subject) => (
+                        <span key={subject.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                          {subject.name || 'Subject'}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Availability</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {teacher.availability.filter((slot) => slot.isAvailable).slice(0, 4).map((slot) => (
+                          <span key={slot.id} className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            {slot.day.slice(0, 3)} {slot.startTime}-{slot.endTime}
+                          </span>
+                        ))}
+                        {teacher.availability.filter((slot) => slot.isAvailable).length === 0 && (
+                          <span className="text-sm text-slate-500">Teacher has not published slots yet.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openBookingModal(teacher, 'demo')}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623] hover:text-[#d99018]"
+                      >
+                        Book Demo Class
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openBookingModal(teacher, 'paid')}
+                        className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                      >
+                        Book Paid Class
+                      </button>
                     </div>
                   </div>
                 </div>
-                
-                <p className="text-sm text-gray-500 line-clamp-2 mb-4 leading-relaxed">
-                  {truncatedBio}
-                </p>
-                
-                <div className="flex flex-wrap gap-1.5 mb-6">
-                  {teacherSubjects.slice(0, 3).map((sub: any) => (
-                    <span key={sub.id} className="px-2.5 py-1 bg-gray-50 text-gray-600 text-[10px] font-medium rounded-lg border border-gray-100">
-                      {sub.name}
-                    </span>
-                  ))}
-                  {teacherSubjects.length > 3 && (
-                    <span className="px-2.5 py-1 bg-gray-50 text-gray-400 text-[10px] font-medium rounded-lg border border-gray-100">
-                      +{teacherSubjects.length - 3} more
-                    </span>
-                  )}
-                </div>
-                
-                <div className="mt-auto pt-4 border-t border-gray-50 flex items-center justify-between">
-                  <div className="text-xs text-gray-400">
-                    Starting from <span className="text-[#f5a623] font-bold">AED 40/hr</span>
-                  </div>
-                  <button className="text-sm font-bold text-[#f5a623] hover:text-[#e09513] flex items-center group/btn">
-                    View Profile
-                    <ChevronRight className="w-4 h-4 ml-1 group-hover/btn:translate-x-1 transition-transform" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {filteredTeachers.length === 0 && (
-        <div className="text-center py-12">
-          <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-600">No teachers found</h3>
-          <p className="text-gray-500">Try adjusting your search criteria</p>
-        </div>
-      )}
-    </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </>
   );
 
   const renderMyClasses = () => (
-    <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Bookings</p>
-              <p className="stat-value">{bookings.length}</p>
+    <>
+      <Panel title="Upcoming Classes" description="Accepted classes appear here with the live meeting link.">
+        <div className="space-y-4">
+          {upcomingBookings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+              No upcoming classes yet.
             </div>
-            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-              <BookOpen className="w-7 h-7 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Upcoming Classes</p>
-              <p className="stat-value text-[#f5a623]">{bookings.filter((b: any) => b.status === 'accepted').length}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-              <Calendar className="w-7 h-7 text-[#f5a623]" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Completed Classes</p>
-              <p className="stat-value text-green-600">{bookings.filter((b: any) => b.status === 'completed').length}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Upcoming Classes */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Upcoming Classes</h3>
-        <div className="space-y-3">
-          {bookings
-            .filter((b: any) => b.status === 'accepted')
-            .map((booking: any) => {
-              const teacher = teachers.find(t => t.id === booking.teacherId);
-              return (
-                <div key={booking.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <img 
-                      src={teacher?.profilePicture} 
-                      alt={teacher?.name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                    <div>
-                      <p className="font-medium text-[#4a4a4a]">{booking.subjectName} with {teacher?.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                      <p className="text-xs text-[#f5a623]">${booking.pricePerHour}/hour • {booking.gradeLevel}</p>
-                      {booking.is_demo && (
-                        <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
-                      )}
-                    </div>
+          ) : upcomingBookings.map((booking) => (
+            <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-slate-950">{booking.subjectName}</h3>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(booking.status)}`}>
+                      {booking.status.replace('_', ' ')}
+                    </span>
+                    {booking.isDemo && (
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">Demo</span>
+                    )}
                   </div>
+                  <p className="text-sm text-slate-600">Teacher: {booking.teacherName}</p>
+                  <p className="text-sm text-slate-600">Date: {formatDateTime(booking.scheduledDate)}</p>
+                  <p className="text-sm text-slate-600">Duration: {booking.duration} minutes</p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
                   {booking.meetingLink ? (
-                    <div className="flex items-center space-x-2">
-                      <a 
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => copyMeetingLink(booking.meetingLink || '')}
+                        className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Copy className="h-4 w-4" />
+                          Copy Link
+                        </span>
+                      </button>
+                      <a
                         href={booking.meetingLink}
                         target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
+                        rel="noreferrer"
+                        className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
                       >
-                        <Video className="w-4 h-4" />
-                        <span>Join</span>
+                        <span className="inline-flex items-center gap-2">
+                          <Video className="h-4 w-4" />
+                          Join Class
+                        </span>
                       </a>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(booking.meetingLink);
-                          alert('Link copied to clipboard!');
-                        }}
-                        className="p-2 border border-gray-200 rounded-lg hover:bg-gray-100"
-                        title="Copy Link"
-                      >
-                        <FileText className="w-4 h-4 text-gray-500" />
-                      </button>
-                    </div>
+                    </>
                   ) : (
-                    <span className="text-sm text-gray-500 italic">Waiting for meeting link...</span>
+                    <span className="rounded-2xl bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                      Waiting for teacher link
+                    </span>
                   )}
                 </div>
-              );
-            })}
-          {bookings.filter((b: any) => b.status === 'accepted').length === 0 && (
-            <p className="text-center text-gray-500 py-4">No upcoming classes</p>
-          )}
+              </div>
+            </article>
+          ))}
         </div>
-      </div>
+      </Panel>
 
-      {/* Booking History */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Booking History</h3>
-        <div className="data-table">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th>Subject</th>
-                <th>Teacher</th>
-                <th>Grade</th>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.map((booking: any) => {
-                const teacher = teachers.find(t => t.id === booking.teacherId);
-                return (
-                  <tr key={booking.id}>
-                    <td>{booking.subjectName}</td>
-                    <td>{teacher?.name}</td>
-                    <td>{booking.gradeLevel}</td>
-                    <td>{new Date(booking.scheduledDate).toLocaleDateString()}</td>
-                    <td>${booking.totalAmount}</td>
-                    <td>
-                      <span className={`badge ${
-                        booking.status === 'accepted' ? 'badge-approved' :
-                        booking.status === 'pending_teacher' ? 'badge-pending' :
-                        booking.status === 'pending_admin' ? 'bg-yellow-100 text-yellow-700' :
-                        booking.status === 'completed' ? 'bg-purple-100 text-purple-700' :
-                        'badge-rejected'
-                      }`}>
-                        {booking.status === 'pending_teacher' ? 'Awaiting Teacher' :
-                         booking.status === 'pending_admin' ? 'Payment Review' :
-                         booking.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <Panel title="Pending Requests" description="Track requests waiting for admin verification or teacher review.">
+        <div className="space-y-4">
+          {pendingBookings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+              No pending requests.
+            </div>
+          ) : pendingBookings.map((booking) => (
+            <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-950">{booking.subjectName}</h3>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(booking.status)}`}>
+                      {booking.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{booking.teacherName} on {formatDateTime(booking.scheduledDate)}</p>
+                </div>
+                <p className="text-sm font-medium text-slate-700">
+                  {booking.isDemo ? 'Free demo' : `$${booking.totalAmount.toFixed(2)}`}
+                </p>
+              </div>
+            </article>
+          ))}
         </div>
+      </Panel>
+    </>
+  );
+
+  const renderMyTeachers = () => (
+    <Panel title="My Teachers" description="Teachers from your accepted or completed class history.">
+      <div className="grid gap-4 md:grid-cols-2">
+        {myTeachers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500 md:col-span-2">
+            Your teachers will appear here after your first accepted class.
+          </div>
+        ) : myTeachers.map((teacher) => (
+          <article key={teacher.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex items-center gap-4">
+              <img
+                src={teacher.profilePicture || '/default-avatar.png'}
+                alt={teacher.name}
+                className="h-16 w-16 rounded-2xl object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold text-slate-950">{teacher.name}</h3>
+                <p className="text-sm text-slate-500">{teacher.bio || 'Professional tutor'}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {teacher.subjects.map((subject) => (
+                    <span key={subject.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                      {subject.name || 'Subject'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-    </div>
+    </Panel>
   );
 
   const renderPayments = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">My Payments</h3>
-      
-      {/* Pending Payments */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h4 className="font-semibold text-[#4a4a4a] mb-4">Pending Payments</h4>
-        <div className="space-y-3">
-          {bookings
-            .filter((b: any) => b.status === 'pending_admin')
-            .map((booking: any) => {
-              const teacher = teachers.find(t => t.id === booking.teacherId);
-              return (
-                <div key={booking.id} className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div>
-                    <p className="font-medium text-[#4a4a4a]">{booking.subjectName} with {teacher?.name}</p>
-                    <p className="text-sm text-gray-500">{booking.gradeLevel}</p>
-                    <p className="text-sm font-medium text-[#f5a623]">Amount: ${booking.totalAmount}</p>
-                  </div>
-                  <button 
-                    onClick={() => { 
-                      setSelectedBooking(booking); 
-                      setSelectedBookingSubject(booking.subjectId);
-                      setShowPaymentModal(true); 
-                    }}
-                    className="btn-primary text-sm py-2 px-4"
-                    title="Upload Payment"
+    <Panel title="Payment Requests" description="Paid class requests, receipt status, and verification progress.">
+      <div className="space-y-4">
+        {paidBookings.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+            No paid class requests yet.
+          </div>
+        ) : paidBookings.map((booking) => (
+          <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-slate-950">{booking.subjectName}</h3>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(booking.status)}`}>
+                    {booking.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{booking.teacherName} on {formatDateTime(booking.scheduledDate)}</p>
+                <p className="mt-1 text-sm text-slate-600">Amount: ${booking.totalAmount.toFixed(2)}</p>
+                {booking.receiptUrl && (
+                  <a
+                    href={booking.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-[#d99018]"
                   >
-                    Upload Payment
-                  </button>
-                </div>
-              );
-            })}
-          {bookings.filter((b: any) => b.status === 'pending_admin').length === 0 && (
-            <p className="text-center text-gray-500 py-4">No pending payments</p>
-          )}
-        </div>
-      </div>
+                    <ExternalLink className="h-4 w-4" />
+                    View uploaded receipt
+                  </a>
+                )}
+              </div>
 
-      {/* Demo Classes Section */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h4 className="font-semibold text-[#4a4a4a] mb-4">Demo Classes</h4>
-        <div className="space-y-3">
-          {bookings
-            .filter((b: any) => b.is_demo)
-            .map((booking: any) => {
-              const teacher = teachers.find(t => t.id === booking.teacherId);
-              return (
-                <div key={booking.id} className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <p className="font-medium text-[#4a4a4a]">{booking.subjectName} with {teacher?.name}</p>
-                      <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full">Demo</span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className={`text-sm ${
-                      booking.status === 'pending_teacher' ? 'text-yellow-600' :
-                      booking.status === 'accepted' ? 'text-green-600' :
-                      'text-gray-500'
-                    }`}>
-                      {booking.status === 'pending_teacher' ? 'Waiting for teacher confirmation...' :
-                       booking.status === 'accepted' ? 'Confirmed!' :
-                       booking.status}
-                    </p>
-                  </div>
-                  {booking.meetingLink ? (
-                    <a 
-                      href={booking.meetingLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-primary text-sm py-2 px-4 flex items-center space-x-2"
-                    >
-                      <Video className="w-4 h-4" />
-                      <span>Join</span>
-                    </a>
-                  ) : booking.status === 'pending_teacher' ? (
-                    <span className="text-sm text-yellow-600">Awaiting...</span>
-                  ) : null}
-                </div>
-              );
-            })}
-          {bookings.filter((b: any) => b.is_demo).length === 0 && (
-            <p className="text-center text-gray-500 py-4">No demo classes booked</p>
-          )}
-        </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                {booking.status === 'pending_admin' && 'Waiting for admin payment verification'}
+                {booking.status === 'pending_teacher' && 'Payment approved. Waiting for teacher acceptance'}
+                {booking.status === 'accepted' && 'Accepted by teacher'}
+                {booking.status === 'rejected' && 'Request rejected'}
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-
-      {/* Payment History */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h4 className="font-semibold text-[#4a4a4a] mb-4">Payment History</h4>
-        <div className="data-table">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th>Booking ID</th>
-                <th>Subject</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings
-                .filter((b: any) => b.status === 'accepted' || b.status === 'completed')
-                .map((booking: any) => (
-                <tr key={booking.id}>
-                  <td>#{booking.id}</td>
-                  <td>{booking.subjectName}</td>
-                  <td>${booking.totalAmount}</td>
-                  <td>
-                    <span className="badge badge-approved">Paid</span>
-                  </td>
-                  <td>{new Date(booking.createdAt).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    </Panel>
   );
 
-  const renderSettings = () => (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Profile Picture */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Profile Picture</h3>
-          <div className="flex flex-col items-center">
-            <img 
-              src={settingsForm.profilePicture || '/default-avatar.png'} 
-              alt="Profile"
-              className="w-32 h-32 rounded-full object-cover border-4 border-[#f5a623] mb-4"
+  const renderProfile = () => (
+    <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+      <Panel title="Profile" description="Manage your student details and profile picture.">
+        <div className="grid gap-6 md:grid-cols-[220px,1fr]">
+          <div className="rounded-3xl bg-slate-50 p-5 text-center">
+            <img
+              src={student.profilePicture || '/default-avatar.png'}
+              alt={student.name}
+              className="mx-auto h-32 w-32 rounded-3xl object-cover"
             />
-            <label className="btn-primary py-2 px-6 flex items-center space-x-2 cursor-pointer">
-              <Upload className="w-4 h-4" />
-              <span>{uploadingFile ? 'Uploading...' : 'Change Picture'}</span>
-              <input 
-                type="file" 
-                className="hidden" 
+            <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]">
+              <Upload className="h-4 w-4" />
+              {uploadingPicture ? 'Uploading...' : 'Change picture'}
+              <input
+                type="file"
                 accept="image/*"
-                onChange={(e) => e.target.files?.[0] && handleProfilePictureUpload(e.target.files[0])}
-                disabled={uploadingFile}
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    handleProfilePictureUpload(file);
+                  }
+                }}
+                disabled={uploadingPicture}
               />
             </label>
           </div>
-        </div>
 
-        {/* Personal Information */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Personal Information</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <UserIcon className="w-4 h-4" />
-                <span>Full Name</span>
-              </label>
-              <input 
-                type="text" 
-                className="form-input"
-                value={settingsForm.name}
-                onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})}
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Full name</span>
+              <input
+                type="text"
+                value={profileForm.name}
+                onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
               />
-            </div>
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <Mail className="w-4 h-4" />
-                <span>Email Address</span>
-              </label>
-              <input 
-                type="email" 
-                className="form-input"
-                value={settingsForm.email}
-                onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})}
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input
+                type="email"
+                value={student.email}
+                readOnly
+                className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500 outline-none"
               />
-            </div>
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <Phone className="w-4 h-4" />
-                <span>Phone Number</span>
-              </label>
-              <input 
-                type="tel" 
-                className="form-input"
-                value={settingsForm.phoneNumber}
-                onChange={(e) => setSettingsForm({...settingsForm, phoneNumber: e.target.value})}
-                placeholder="+1 (555) 000-0000"
-              />
-            </div>
-            <button 
-              onClick={handleUpdateSettings}
-              className="btn-primary w-full mt-6"
-            >
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Grade Level & Password */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Grade Level */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Education Details</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="form-label">Current Grade/Level</label>
-              <label htmlFor="grade-select" className="sr-only">Select Grade Level</label>
-              <select 
-                id="grade-select"
-                className="form-input"
-                value={settingsForm.gradeLevel}
-                onChange={(e) => setSettingsForm({...settingsForm, gradeLevel: e.target.value})}
-                title="Select Grade Level"
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Grade level</span>
+              <select
+                value={profileForm.gradeLevel}
+                onChange={(event) => setProfileForm((current) => ({ ...current, gradeLevel: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
               >
-                <option value="">Select Grade Level</option>
-                <option value="Grade 1-5">Primary (Grade 1-5)</option>
-                <option value="Grade 6-8">Middle (Grade 6-8)</option>
-                <option value="Grade 9-10">Secondary (Grade 9-10)</option>
-                <option value="O-Level">O-Level</option>
-                <option value="A-Level">A-Level</option>
-                <option value="University/College">University/College</option>
+                <option value="">Select your grade level</option>
+                {[
+                  'Grade 1-5 (Primary)',
+                  'Grade 6-8 (Middle)',
+                  'Grade 9-10 (Secondary)',
+                  'O-Level',
+                  'A-Level',
+                  'University/College',
+                  'Adult Learning',
+                ].map((grade) => (
+                  <option key={grade} value={grade}>{grade}</option>
+                ))}
               </select>
-            </div>
-            <button 
-              onClick={handleUpdateSettings}
-              className="btn-primary w-full"
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Parent contact</span>
+              <input
+                type="text"
+                value={profileForm.parentContact}
+                onChange={(event) => setProfileForm((current) => ({ ...current, parentContact: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+              />
+            </label>
+            <label className="space-y-2 md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Location</span>
+              <input
+                type="text"
+                value={profileForm.location}
+                onChange={(event) => setProfileForm((current) => ({ ...current, location: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleProfileSave}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950 md:col-span-2"
+              disabled={saving}
             >
-              Update Grade
+              <Save className="h-4 w-4" />
+              Save profile
             </button>
           </div>
         </div>
+      </Panel>
 
-        {/* Password & Security */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Password & Security</h3>
-            <button 
-              onClick={() => setIsChangingPassword(!isChangingPassword)}
-              className="text-[#f5a623] text-sm hover:underline"
-            >
-              {isChangingPassword ? 'Cancel' : 'Change Password'}
-            </button>
-          </div>
-
-          {isChangingPassword ? (
-            <div className="space-y-4">
-              <div>
-                <label className="form-label">Current Password</label>
-                <div className="relative">
-                  <input 
-                    type={showCurrentPassword ? 'text' : 'password'}
-                    className="form-input pr-10"
-                    value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                  >
-                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">New Password</label>
-                <div className="relative">
-                  <input 
-                    type={showNewPassword ? 'text' : 'password'}
-                    className="form-input pr-10"
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                  >
-                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">Confirm Password</label>
-                <div className="relative">
-                  <input 
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    className="form-input pr-10"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  Password must be at least 6 characters long.
-                </p>
-              </div>
-
-              <button 
-                onClick={handleChangePassword}
-                className="btn-primary w-full"
-              >
-                Update Password
-              </button>
-            </div>
-          ) : (
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-green-700">
-                ✓ Your password is secure. Change it periodically for better security.
-              </p>
-            </div>
-          )}
+      <Panel title="Security" description="Change your password and keep your account secure.">
+        <div className="space-y-4">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Current password</span>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">New password</span>
+            <input
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Confirm new password</span>
+            <input
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handlePasswordChange}
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#f5a623] hover:text-[#d99018]"
+            disabled={saving}
+          >
+            Update password
+          </button>
         </div>
-      </div>
-
-      {/* Account Information */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Account Information</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center py-3 border-b">
-            <span className="text-gray-600">Account Status</span>
-            <span className="badge badge-approved">Active</span>
-          </div>
-          <div className="flex justify-between items-center py-3 border-b">
-            <span className="text-gray-600">Member Since</span>
-            <span className="text-gray-900">{student?.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A'}</span>
-          </div>
-          <div className="flex justify-between items-center py-3">
-            <span className="text-gray-600">Account ID</span>
-            <span className="text-gray-900 font-mono text-sm">{student?.id}</span>
-          </div>
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 
   return (
-    <div className="dashboard-layout">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="p-6">
-          <div className="flex items-center space-x-3 mb-8">
-            <img 
-              src={student?.profilePicture || '/default-avatar.png'} 
-              alt={student?.name}
-              className="w-12 h-12 rounded-full object-cover border-2 border-[#f5a623]"
-            />
-            <div>
-              <p className="font-semibold text-white">{student?.name}</p>
-              <p className="text-xs text-white/60">Student</p>
-            </div>
-          </div>
+    <>
+      <DashboardLayout
+        title={NAV_ITEMS.find((item) => item.id === activeTab)?.label || 'Student Dashboard'}
+        subtitle="Book demo classes, upload receipts, and manage your class schedule."
+        userName={student.name}
+        roleLabel="Student"
+        avatarUrl={student.profilePicture}
+        navItems={[...NAV_ITEMS]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={logout}
+      >
+        {activeTab === 'find-teachers' && renderFindTeachers()}
+        {activeTab === 'my-classes' && renderMyClasses()}
+        {activeTab === 'my-teachers' && renderMyTeachers()}
+        {activeTab === 'payments' && renderPayments()}
+        {activeTab === 'profile' && renderProfile()}
+      </DashboardLayout>
 
-          <nav className="sidebar-nav">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`sidebar-nav-item w-full ${activeTab === item.id ? 'active' : ''}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <button 
-            onClick={logout}
-            className="sidebar-nav-item w-full text-red-400 hover:text-red-300"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <h1 className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">
-            {sidebarItems.find(i => i.id === activeTab)?.label}
-          </h1>
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
-                title="Notifications"
-              >
-                <Bell className="w-5 h-5 text-gray-600" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full animate-pulse">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-              {showNotifications && renderNotifications()}
-            </div>
-          </div>
-        </header>
-
-        <div className="dashboard-content">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">
-              {error}
-            </div>
-          )}
-          {activeTab === 'find-teachers' && renderFindTeachers()}
-          {activeTab === 'my-classes' && renderMyClasses()}
-          {activeTab === 'my-teachers' && (
-            <div className="text-center py-12 text-gray-500">
-              My Teachers list coming soon...
-            </div>
-          )}
-          {activeTab === 'payments' && renderPayments()}
-          {activeTab === 'settings' && renderSettings()}
-        </div>
-      </main>
-
-      {/* Teacher Detail Modal */}
-      {selectedTeacher && (
-        <div className="modal-overlay" onClick={() => setSelectedTeacher(null)}>
-          <div className="modal-content max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="relative h-48 bg-gradient-to-br from-[#f5a623]/20 to-[#f5a623]/5 rounded-t-2xl -mx-8 -mt-8 mb-6">
-              <img 
-                src={selectedTeacher.profilePicture} 
-                alt={selectedTeacher.name}
-                className="w-full h-full object-cover"
-              />
-              <button 
-                onClick={() => setSelectedTeacher(null)}
-                className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg"
-              >
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="flex items-start justify-between mb-4">
+      {selectedTeacher && bookingMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">{selectedTeacher.name}</h3>
-                <div className="flex items-center space-x-2 mt-1">
-                  <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-                  <span className="font-medium">4.9</span>
-                  <span className="text-gray-500">(128 reviews)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h4 className="font-semibold text-[#4a4a4a] mb-2">About</h4>
-              <p className="text-gray-600 whitespace-pre-wrap">{selectedTeacher.bio || 'No bio available.'}</p>
-            </div>
-
-            {(selectedTeacher.yearsOfExperience || selectedTeacher.qualifications) && (
-              <div className="mb-6">
-                <h4 className="font-semibold text-[#4a4a4a] mb-3">Qualifications</h4>
-                {selectedTeacher.yearsOfExperience && (
-                  <div className="flex items-center space-x-2 mb-2">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="text-gray-700">
-                      {selectedTeacher.yearsOfExperience} {selectedTeacher.yearsOfExperience === 1 ? 'Year' : 'Years'} of Experience
-                    </span>
-                  </div>
-                )}
-                {selectedTeacher.qualifications && (
-                  <div className="flex items-start space-x-2">
-                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                    <span className="text-gray-700 whitespace-pre-wrap">{selectedTeacher.qualifications}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mb-6">
-              <h4 className="font-semibold text-[#4a4a4a] mb-2">Subjects Offered</h4>
-              <div className="flex flex-wrap gap-2">
-                {getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
-                  <span key={sub.id} className="px-3 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-sm">
-                    {sub.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h4 className="font-semibold text-[#4a4a4a] mb-2">Availability</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {selectedTeacher.availability?.length > 0 ? (
-                  selectedTeacher.availability.map((slot: any) => (
-                    <div key={slot.id} className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
-                      <Clock className="w-4 h-4 text-[#f5a623]" />
-                      <span className="text-sm capitalize">{slot.day}: {slot.startTime}-{slot.endTime}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm col-span-2">Contact the teacher for availability.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-700">
-                <span className="font-medium">Contact us</span> for pricing information. 
-                Rates vary based on grade level and subject.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button 
-                onClick={() => {
-                  setSelectedTeacher(null);
-                  setShowPaymentModal(true);
-                }}
-                className="btn-primary flex-1 py-3 text-lg flex items-center justify-center space-x-2"
-              >
-                <span>Book a Class</span>
-              </button>
-              <button 
-                onClick={() => {
-                  setShowDemoModal(true);
-                }}
-                className="btn-secondary flex-1 py-3 text-lg flex items-center justify-center space-x-2"
-              >
-                <span>Book a Demo</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Demo Booking Modal */}
-      {showDemoModal && selectedTeacher && (
-        <div className="modal-overlay" onClick={() => setShowDemoModal(false)}>
-          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                Book a Free Demo Class
-              </h3>
-              <button onClick={() => setShowDemoModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-700">
-                  Book a free 30-minute demo class with {selectedTeacher.name}. 
-                  The teacher will confirm your session time and share a meeting link.
+                <p className="text-sm font-medium text-[#d99018]">
+                  {bookingMode === 'demo' ? 'Book Demo Class' : 'Book Paid Class'}
                 </p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">{selectedTeacher.name}</h3>
+                <p className="mt-2 text-sm text-slate-500">{selectedTeacher.bio || 'Professional tutor ready for your next class.'}</p>
               </div>
-
-              <div>
-                <label className="form-label">Select Subject</label>
-                <select 
-                  className="form-input"
-                  value={selectedDemoSlot?.subjectId || ''}
-                  onChange={(e) => {
-                    const subjectId = e.target.value;
-                    setSelectedDemoSlot({ 
-                      ...selectedDemoSlot, 
-                      subjectId: subjectId,
-                      scheduledDate: selectedDemoSlot?.scheduledDate || ''
-                    });
-                  }}
-                >
-                  <option value="">Choose a subject</option>
-                  {getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
-                    <option key={sub.id} value={sub.id}>{sub.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="form-label">Available Slots</label>
-                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-1">
-                  {selectedTeacher.availability?.length > 0 ? (
-                    selectedTeacher.availability.filter((s: any) => s.isAvailable).map((slot: any) => (
-                      <button
-                        key={slot.id}
-                        onClick={() => setSelectedDemoSlot({
-                          ...selectedDemoSlot,
-                          scheduledDate: `${slot.day} ${slot.startTime}-${slot.endTime}`,
-                          slotId: slot.id
-                        })}
-                        className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-                          selectedDemoSlot?.slotId === slot.id 
-                            ? 'bg-[#f5a623]/10 border-[#f5a623] text-[#f5a623]' 
-                            : 'bg-white border-gray-200 hover:border-[#f5a623] text-gray-600'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm font-medium capitalize">{slot.day}</span>
-                        </div>
-                        <span className="text-sm">{slot.startTime} - {slot.endTime}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-4 bg-gray-50 rounded-lg">
-                      No specific slots set. You can still pick a custom time below.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">Or Pick Custom Date & Time</label>
-                <input
-                  type="datetime-local"
-                  className="form-input"
-                  value={selectedDemoSlot?.scheduledDate && !selectedDemoSlot?.slotId ? selectedDemoSlot.scheduledDate.slice(0, 16) : ''}
-                  onChange={(e) => setSelectedDemoSlot({ 
-                    ...selectedDemoSlot, 
-                    slotId: undefined,
-                    scheduledDate: new Date(e.target.value).toISOString()
-                  })}
-                  min={new Date().toISOString().slice(0, 16)}
-                />
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-medium text-[#4a4a4a] mb-2">What happens next?</h4>
-                <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                  <li>Your demo request is sent to the teacher</li>
-                  <li>The teacher will review and confirm</li>
-                  <li>You'll receive a meeting link via notification</li>
-                  <li>Join the free 30-minute session</li>
-                </ol>
-              </div>
-
-              <button 
-                onClick={handleBookDemo}
-                disabled={!selectedDemoSlot?.subjectId || !selectedDemoSlot?.scheduledDate}
-                className="btn-primary w-full py-3 flex items-center justify-center space-x-2"
+              <button
+                type="button"
+                onClick={resetBookingModal}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400"
               >
-                <span>Request Demo Class</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Upload Modal */}
-      {showPaymentModal && (
-        <div className="modal-overlay" onClick={() => {
-          if (bookingStep !== 2) setShowPaymentModal(false);
-        }}>
-          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                {bookingStep === 1 ? 'Book a Class' : 
-                 bookingStep === 2 ? 'Payment Verification' : 'Booking Successful'}
-              </h3>
-              <button 
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setBookingStep(1);
-                  setSelectedBookingSubject('');
-                  setSelectedBooking(null);
-                }} 
-                className="p-2 hover:bg-gray-100 rounded-full"
-              >
-                <XCircle className="w-5 h-5 text-gray-500" />
+                Close
               </button>
             </div>
 
-            {bookingStep === 1 ? (
-              <div className="space-y-6">
-                {/* Subject Selection */}
-                <div>
-                  <label className="form-label">Select Subject</label>
-                  <select 
-                    className="form-input"
-                    value={selectedBookingSubject}
-                    onChange={(e) => setSelectedBookingSubject(e.target.value)}
+            <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+              <div className="space-y-5">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">Subject</span>
+                  <select
+                    value={bookingForm.subjectId}
+                    onChange={(event) => setBookingForm((current) => ({ ...current, subjectId: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
                   >
-                    <option value="">Choose a subject</option>
-                    {selectedTeacher && getSubjectNames(selectedTeacher.subjects).map((sub: any) => (
-                      <option key={sub.id} value={sub.id}>{sub.name}</option>
+                    <option value="">Select subject</option>
+                    {selectedTeacher.subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>{subject.name || 'Subject'}</option>
                     ))}
                   </select>
-                </div>
+                </label>
 
-                {/* Available Slots */}
                 <div>
-                  <label className="form-label">Select Timing</label>
-                  <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-1">
-                    {selectedTeacher?.availability?.length > 0 ? (
-                      selectedTeacher.availability.filter((s: any) => s.isAvailable).map((slot: any) => (
-                        <button
-                          key={slot.id}
-                          onClick={() => setSelectedDemoSlot({
-                            ...selectedDemoSlot,
-                            scheduledDate: `${slot.day} ${slot.startTime}-${slot.endTime}`,
-                            slotId: slot.id
-                          })}
-                          className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                            selectedDemoSlot?.slotId === slot.id 
-                              ? 'bg-[#f5a623]/10 border-[#f5a623] text-[#f5a623]' 
-                              : 'bg-white border-gray-200 hover:border-[#f5a623] text-gray-600'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-3 h-3" />
-                            <span className="text-xs font-medium capitalize">{slot.day}</span>
-                          </div>
-                          <span className="text-xs">{slot.startTime} - {slot.endTime}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-xs text-gray-500 text-center py-2">No availability slots set.</p>
+                  <p className="text-sm font-medium text-slate-700">Teacher availability</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedTeacher.availability.filter((slot) => slot.isAvailable).map((slot) => (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        onClick={() => setBookingForm((current) => ({
+                          ...current,
+                          scheduledDate: nextOccurrenceForSlot(slot.day, slot.startTime),
+                        }))}
+                        className="rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:border-[#f5a623] hover:text-[#d99018]"
+                      >
+                        {slot.day.slice(0, 3)} {slot.startTime}-{slot.endTime}
+                      </button>
+                    ))}
+                    {selectedTeacher.availability.filter((slot) => slot.isAvailable).length === 0 && (
+                      <p className="text-sm text-slate-500">No availability slots published yet. Pick a custom time below.</p>
                     )}
                   </div>
                 </div>
 
-                {/* Duration Selection */}
-                <div>
-                  <label className="form-label">Class Duration</label>
-                  <select 
-                    className="form-input"
-                    value={bookingDuration}
-                    onChange={(e) => setBookingDuration(Number(e.target.value))}
-                  >
-                    <option value={30}>30 minutes</option>
-                    <option value={60}>60 minutes</option>
-                    <option value={90}>90 minutes</option>
-                    <option value={120}>120 minutes</option>
-                  </select>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">Preferred date and time</span>
+                  <input
+                    type="datetime-local"
+                    value={bookingForm.scheduledDate}
+                    onChange={(event) => setBookingForm((current) => ({ ...current, scheduledDate: event.target.value }))}
+                    min={toLocalInputValue(new Date())}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                  />
+                </label>
+
+                {bookingMode === 'paid' && (
+                  <>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Duration</span>
+                      <select
+                        value={bookingForm.duration}
+                        onChange={(event) => setBookingForm((current) => ({ ...current, duration: Number(event.target.value) }))}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                      >
+                        <option value={30}>30 minutes</option>
+                        <option value={60}>60 minutes</option>
+                        <option value={90}>90 minutes</option>
+                        <option value={120}>120 minutes</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium text-slate-700">Receipt upload</span>
+                      <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                        <span className="inline-flex items-center gap-2">
+                          <Upload className="h-4 w-4" />
+                          {bookingForm.receiptFile ? bookingForm.receiptFile.name : 'Choose receipt image or PDF'}
+                        </span>
+                        <span className="font-medium text-[#d99018]">Browse</span>
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={(event) => setBookingForm((current) => ({
+                            ...current,
+                            receiptFile: event.target.files?.[0] || null,
+                          }))}
+                        />
+                      </label>
+                    </label>
+                  </>
+                )}
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-slate-700">Notes</span>
+                  <textarea
+                    value={bookingForm.notes}
+                    onChange={(event) => setBookingForm((current) => ({ ...current, notes: event.target.value }))}
+                    rows={3}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                    placeholder="Share anything the teacher should know before the class."
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-5">
+                <div className="rounded-3xl bg-slate-950 p-5 text-white">
+                  <p className="text-sm text-white/70">{bookingMode === 'demo' ? 'Demo booking' : 'Pricing summary'}</p>
+                  <p className="mt-3 text-3xl font-semibold">
+                    {bookingMode === 'demo' ? 'Free' : `$${totalAmount.toFixed(2)}`}
+                  </p>
+                  <div className="mt-4 space-y-2 text-sm text-white/80">
+                    <p>Subject: {selectedTeacher.subjects.find((subject) => subject.id === bookingForm.subjectId)?.name || 'Choose a subject'}</p>
+                    <p>Grade level: {student.gradeLevel || 'Not set'}</p>
+                    {bookingMode === 'paid' && (
+                      <>
+                        <p>Hourly rate: ${selectedPrice.toFixed(2)}</p>
+                        <p>Duration: {bookingForm.duration} minutes</p>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                {/* Price Calculation */}
-                {selectedBookingSubject && (
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-600">Hourly Rate</span>
-                      <span className="font-medium">${getPriceForSubjectAndGrade(selectedBookingSubject, student?.gradeLevel)}/hr</span>
-                    </div>
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-600">Duration</span>
-                      <span className="font-medium">{bookingDuration} minutes</span>
-                    </div>
-                    <div className="border-t pt-2 flex justify-between">
-                      <span className="font-semibold">Total to Pay</span>
-                      <span className="font-bold text-[#f5a623] text-xl">
-                        ${Math.round((getPriceForSubjectAndGrade(selectedBookingSubject, student?.gradeLevel) * bookingDuration) / 60)}
-                      </span>
+                {bookingMode === 'paid' && (
+                  <div className="rounded-3xl border border-slate-200 p-5">
+                    <h4 className="font-semibold text-slate-950">Bank details</h4>
+                    <div className="mt-4 space-y-2 text-sm text-slate-600">
+                      <p><span className="font-medium text-slate-800">Bank:</span> {bankDetails.bankName || 'Not configured'}</p>
+                      <p><span className="font-medium text-slate-800">Account:</span> {bankDetails.accountNumber || 'Not configured'}</p>
+                      <p><span className="font-medium text-slate-800">IBAN:</span> {bankDetails.iban || 'Not configured'}</p>
+                      <p><span className="font-medium text-slate-800">Holder:</span> {bankDetails.accountHolderName || 'Not configured'}</p>
+                      {bankDetails.swiftCode && <p><span className="font-medium text-slate-800">SWIFT:</span> {bankDetails.swiftCode}</p>}
                     </div>
                   </div>
                 )}
 
-                <button 
-                  onClick={handleBookClass}
-                  className="btn-primary w-full py-3"
-                  disabled={!selectedBookingSubject || !selectedDemoSlot?.scheduledDate}
+                <button
+                  type="button"
+                  onClick={bookingMode === 'demo' ? handleDemoBooking : handlePaidBooking}
+                  disabled={saving || (bookingMode === 'paid' && !selectedPrice)}
+                  className="w-full rounded-2xl bg-[#f5a623] px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-[#d99018] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Confirm and Pay
+                  {saving
+                    ? 'Submitting...'
+                    : bookingMode === 'demo'
+                      ? 'Send demo request'
+                      : 'Submit paid booking'}
                 </button>
               </div>
-            ) : bookingStep === 2 ? (
-              <div className="space-y-6">
-                <div className="bg-[#f5a623]/10 border border-[#f5a623]/20 rounded-lg p-4">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm text-gray-600">Total Amount Due</span>
-                    <span className="font-bold text-[#f5a623]">${selectedBooking?.totalAmount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Reference</span>
-                    <span className="font-mono text-xs">IKL-{selectedBooking?.id?.slice(0, 8)}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-[#4a4a4a] mb-3">Bank Transfer Details</h4>
-                  <div className="bg-blue-50 p-4 rounded-lg space-y-2 border border-blue-100">
-                    <div className="flex justify-between">
-                      <span className="text-xs text-blue-600">Bank Name</span>
-                      <span className="text-sm font-medium">{bankDetails?.bankName || 'HBL Bank'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-blue-600">Account Number</span>
-                      <span className="text-sm font-medium">{bankDetails?.accountNumber || '0042 3456 7890 12'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-blue-600">IBAN</span>
-                      <span className="text-sm font-medium font-mono">{bankDetails?.iban || 'PK89HBL00423456789012'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-blue-600">Account Holder</span>
-                      <span className="text-sm font-medium">{bankDetails?.accountHolderName || 'I-K-LEARN-EDGE'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Upload Payment Receipt</label>
-                  <div className="relative">
-                    <label className={`file-upload-zone cursor-pointer ${uploadingFile ? 'opacity-50' : ''}`}>
-                      <Upload className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm text-gray-500">
-                        {uploadingFile ? 'Uploading...' : 'Click to upload or drag receipt'}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF up to 5MB</p>
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={(e) => e.target.files?.[0] && handleUploadPayment(e.target.files[0])}
-                        disabled={uploadingFile}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-10 h-10 text-green-600" />
-                </div>
-                <h4 className="text-xl font-bold text-[#4a4a4a] mb-2">Request Sent!</h4>
-                <p className="text-gray-600 mb-6">
-                  Your payment proof has been uploaded. The admin will verify it and confirm your booking shortly.
-                </p>
-                <button 
-                  onClick={() => {
-                    setShowPaymentModal(false);
-                    setBookingStep(1);
-                    setSelectedBookingSubject('');
-                    setSelectedBooking(null);
-                  }}
-                  className="btn-primary w-full py-3"
-                >
-                  Return to Dashboard
-                </button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

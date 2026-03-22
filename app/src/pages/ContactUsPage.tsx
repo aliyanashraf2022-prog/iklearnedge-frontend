@@ -1,16 +1,37 @@
 import React from 'react';
 
+const contactItems = [
+  {
+    label: 'Phone',
+    value: '+971507454001',
+    href: 'tel:+971507454001',
+  },
+  {
+    label: 'Email',
+    value: 'rubina1.altaf@gmail.com',
+    href: 'mailto:rubina1.altaf@gmail.com',
+  },
+];
+
 const ContactUsPage: React.FC = () => (
-  <section className="max-w-3xl mx-auto px-4 py-12">
-    <h2 className="text-2xl font-bold mb-6 text-center text-[#4a4a4a]">Contact Us</h2>
-    <p className="text-[#4a4a4a] text-base mb-4">We’re here to help! Reach out to us for any questions or support.</p>
-    <div className="mb-4">
-      <span className="font-semibold">Phone:</span> <a href="tel:+971507454001" className="text-blue-600 hover:underline">+971507454001</a>
+  <section className="mx-auto min-h-screen max-w-3xl px-4 py-16">
+    <div className="rounded-3xl bg-white p-8 shadow-xl">
+      <h1 className="mb-4 text-3xl font-bold text-[#4a4a4a]">Contact Us</h1>
+      <p className="mb-8 text-base text-gray-600">
+        We are here to help. Reach out any time and our team will get back to you as soon as possible.
+      </p>
+
+      <div className="space-y-4">
+        {contactItems.map((item) => (
+          <div key={item.label} className="rounded-2xl border border-gray-100 p-4">
+            <p className="text-sm font-semibold text-gray-500">{item.label}</p>
+            <a href={item.href} className="mt-1 inline-block text-lg font-medium text-[#f5a623] hover:underline">
+              {item.value}
+            </a>
+          </div>
+        ))}
+      </div>
     </div>
-    <div className="mb-4">
-      <span className="font-semibold">Email:</span> <a href="mailto:rubina1.altaf@gmail.com" className="text-blue-600 hover:underline">rubina1.altaf@gmail.com</a>
-    </div>
-    <p className="text-[#666666] text-sm">Our team will respond as soon as possible.</p>
   </section>
 );
 

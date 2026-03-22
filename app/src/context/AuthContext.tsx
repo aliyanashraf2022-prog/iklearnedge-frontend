@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { User, UserRole, LoginCredentials, RegisterData } from '@/types';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authAPI } from '@/services/api';
+import type { LoginCredentials, RegisterData, User, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -21,84 +21,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Check for existing token on mount
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      fetchUserProfile();
-    } else {
+  const hydrateUser = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setUser(null);
+        return;
+      }
+
+      const currentUser = await authAPI.getMe();
+      setUser(currentUser);
+    } catch (err) {
+      console.error('Failed to hydrate user:', err);
+      localStorage.removeItem('token');
+      setUser(null);
+    } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const fetchUserProfile = async () => {
-    try {
-      const response = await authAPI.getMe();
-      // FIX: Handle nested response structure
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
-      } else if (response.user) {
-        setUser(response.user);
-      }
-    } catch (err) {
-      console.error('Failed to fetch user profile:', err);
-      localStorage.removeItem('token');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => {
+    hydrateUser();
+  }, [hydrateUser]);
 
-  const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     setError(null);
     try {
-      const response = await authAPI.login(credentials.email, credentials.password);
-      
-      // FIX: Handle nested API response structure (response.data.data)
-      const responseData = response.data || response;
-      
-      if (responseData.token && responseData.user) {
-        localStorage.setItem('token', responseData.token);
-        setUser(responseData.user);
-        return true;
-      } else if (responseData.data && responseData.data.token && responseData.data.user) {
-        // Handle double-nested structure { data: { user, token } }
-        localStorage.setItem('token', responseData.data.token);
-        setUser(responseData.data.user);
-        return true;
-      } else {
-        throw new Error('Invalid response from server');
-      }
+      const { user: authenticatedUser, token } = await authAPI.login(credentials.email, credentials.password);
+      localStorage.setItem('token', token);
+      setUser(authenticatedUser);
+      return true;
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
-      setError(errorMessage);
-      console.error('Login error:', err);
+      setError(err.message || 'Login failed');
       return false;
     }
   }, []);
 
-  const register = useCallback(async (data: RegisterData): Promise<boolean> => {
+  const register = useCallback(async (data: RegisterData) => {
     setError(null);
     try {
-      const response = await authAPI.register(data);
-      
-      // FIX: Handle nested API response structure
-      const responseData = response.data || response;
-      
-      if (responseData.token && responseData.user) {
-        localStorage.setItem('token', responseData.token);
-        setUser(responseData.user);
-        return true;
-      } else if (responseData.data && responseData.data.token && responseData.data.user) {
-        localStorage.setItem('token', responseData.data.token);
-        setUser(responseData.data.user);
-        return true;
-      } else {
-        throw new Error('Registration failed');
-      }
+      const { user: registeredUser, token } = await authAPI.register(data);
+      localStorage.setItem('token', token);
+      setUser(registeredUser);
+      return true;
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Registration failed';
-      setError(errorMessage);
-      console.error('Registration error:', err);
+      setError(err.message || 'Registration failed');
       return false;
     }
   }, []);
@@ -110,39 +77,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const switchRole = useCallback((role: UserRole) => {
-    if (user) {
-      setUser({ ...user, role });
-    }
-  }, [user]);
+    setUser((current) => current ? { ...current, role } : current);
+  }, []);
 
   const updateUser = useCallback((data: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...data };
-      setUser(updatedUser);
-      // Also update stored user if you store it separately, but token is the main thing
-    }
-  }, [user]);
+    setUser((current) => current ? { ...current, ...data } : current);
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{
-      user,
-      login,
-      register,
-      logout,
-      isAuthenticated: !!user,
-      isLoading,
-      switchRole,
-      updateUser,
-      error
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo<AuthContextType>(() => ({
+    user,
+    login,
+    register,
+    logout,
+    isAuthenticated: !!user,
+    isLoading,
+    switchRole,
+    updateUser,
+    error,
+  }), [error, isLoading, login, logout, register, switchRole, updateUser, user]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

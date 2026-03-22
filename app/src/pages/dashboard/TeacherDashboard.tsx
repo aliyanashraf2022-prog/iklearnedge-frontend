@@ -1,1326 +1,593 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, Calendar, Users, FileText, 
-  Settings, LogOut, Video, Clock, DollarSign,
-  CheckCircle, XCircle, Edit, Upload, Bell,
-  ChevronRight, Star, Loader2, Eye, EyeOff,
-  Mail, Phone, User as UserIcon
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  BookOpen,
+  CalendarDays,
+  FileText,
+  Loader2,
+  Save,
+  Settings,
+  Upload,
+  Users,
+  Video,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
-import { teachersAPI, subjectsAPI, uploadAPI, authAPI, bookingsAPI, notificationsAPI } from '@/services/api';
+import SchedulesPage from '@/pages/teacher-dashboard/SchedulesPage';
+import { authAPI, bookingsAPI, teachersAPI, uploadAPI } from '@/services/api';
+import type { Booking, Teacher } from '@/types';
 
-// Helper to normalize booking fields
-const normalizeBooking = (booking: any) => ({
-  ...booking,
-  teacherId: booking.teacher_id || booking.teacherId,
-  studentId: booking.student_id || booking.studentId,
-  subjectId: booking.subject_id || booking.subjectId,
-  scheduledDate: booking.scheduled_date || booking.scheduledDate,
-  pricePerHour: booking.price_per_hour || booking.pricePerHour,
-  totalAmount: booking.total_amount || booking.totalAmount,
-  meetingLink: booking.meeting_link || booking.meetingLink,
-  gradeLevel: booking.grade_level || booking.gradeLevel,
-  isDemo: booking.is_demo ?? booking.isDemo,
-  receiptUrl: booking.receipt_url || booking.receiptUrl,
-  createdAt: booking.created_at || booking.createdAt,
-  studentName: booking.student_name || booking.studentName,
-  studentEmail: booking.student_email || booking.studentEmail,
-  subjectName: booking.subject_name || booking.subjectName,
-  status: booking.status,
-});
+const NAV_ITEMS = [
+  { id: 'overview', label: 'Overview', icon: BookOpen },
+  { id: 'schedule', label: 'Schedule', icon: CalendarDays },
+  { id: 'students', label: 'Students', icon: Users },
+  { id: 'documents', label: 'Documents', icon: FileText },
+  { id: 'profile', label: 'Profile', icon: Settings },
+] as const;
+
+const getStatusClasses = (status: Booking['status']) => {
+  switch (status) {
+    case 'accepted':
+      return 'bg-green-100 text-green-700';
+    case 'pending_teacher':
+      return 'bg-blue-100 text-blue-700';
+    case 'completed':
+      return 'bg-slate-200 text-slate-700';
+    case 'rejected':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+};
+
+const Panel: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children,
+}) => (
+  <section className="rounded-3xl bg-white p-6 shadow-sm">
+    <div className="mb-4">
+      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+      {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+const StatCard: React.FC<{ label: string; value: string | number; hint?: string }> = ({ label, value, hint }) => (
+  <div className="rounded-3xl bg-white p-5 shadow-sm">
+    <p className="text-sm text-slate-500">{label}</p>
+    <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>
+    {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
+  </div>
+);
 
 const TeacherDashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
-  // Data states
-  const [teacher, setTeacher] = useState<any>(null);
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [demoRequests, setDemoRequests] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Form states
-  const [bio, setBio] = useState('');
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [settingsForm, setSettingsForm] = useState({
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [meetingLinks, setMeetingLinks] = useState<Record<string, string>>({});
+  const [profileForm, setProfileForm] = useState({
     name: '',
-    email: '',
-    phoneNumber: '',
-    profilePicture: ''
+    bio: '',
   });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
 
-  const sidebarItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'schedule', label: 'Schedule', icon: Calendar },
-    { id: 'students', label: 'My Students', icon: Users },
-    { id: 'documents', label: 'Documents', icon: FileText },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const [teacherProfile, teacherBookings] = await Promise.all([
+        teachersAPI.getProfile(),
+        bookingsAPI.getByTeacher(),
+      ]);
 
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      setTeacher(teacherProfile);
+      setBookings(teacherBookings);
+      setProfileForm({
+        name: teacherProfile.name || '',
+        bio: teacherProfile.bio || '',
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Failed to load teacher dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Fetch data on mount
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    loadDashboard();
   }, []);
 
-  const fetchNotifications = async () => {
-    try {
-      const notificationsData = await notificationsAPI.getAll();
-      setNotifications(notificationsData.data || notificationsData.notifications || []);
-      const countData = await notificationsAPI.getUnreadCount();
-      setUnreadCount(countData.count || countData.unreadCount || 0);
-    } catch (e) {
-      console.warn('Could not fetch notifications');
-    }
-  };
+  const pendingRequests = useMemo(
+    () => bookings.filter((booking) => booking.status === 'pending_teacher'),
+    [bookings],
+  );
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Fetch teacher profile
-      const teacherData = await teachersAPI.getProfile();
-      const teacherInfo = teacherData.data || teacherData;
-      setTeacher(teacherInfo);
-      setBio(teacherInfo?.bio || '');
-      setSettingsForm({
-        name: teacherInfo?.name || '',
-        email: teacherInfo?.email || '',
-        phoneNumber: teacherInfo?.phoneNumber || '',
-        profilePicture: teacherInfo?.profile_picture || teacherInfo?.profilePicture || ''
+  const upcomingClasses = useMemo(
+    () => bookings
+      .filter((booking) => booking.status === 'accepted')
+      .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()),
+    [bookings],
+  );
+
+  const completedClasses = useMemo(
+    () => bookings.filter((booking) => booking.status === 'completed'),
+    [bookings],
+  );
+
+  const students = useMemo(() => {
+    const map = new Map<string, { name: string; email: string; bookings: number; nextClass?: string; subjectName?: string }>();
+
+    bookings
+      .filter((booking) => booking.status === 'accepted' || booking.status === 'completed')
+      .forEach((booking) => {
+        const current = map.get(booking.studentId) || {
+          name: booking.studentName || 'Student',
+          email: booking.studentEmail || '',
+          bookings: 0,
+          nextClass: undefined,
+          subjectName: booking.subjectName,
+        };
+
+        current.bookings += 1;
+        if (!current.nextClass || new Date(booking.scheduledDate).getTime() < new Date(current.nextClass).getTime()) {
+          current.nextClass = booking.scheduledDate;
+          current.subjectName = booking.subjectName;
+        }
+
+        map.set(booking.studentId, current);
       });
 
-      // Fetch subjects
-      const subjectsData = await subjectsAPI.getAll();
-      setSubjects(subjectsData.data || subjectsData.subjects || []);
+    return Array.from(map.entries()).map(([id, value]) => ({ id, ...value }));
+  }, [bookings]);
 
-      // Fetch teacher's bookings
-      let normalizedBookings: any[] = [];
-      try {
-        const bookingsData = await bookingsAPI.getByTeacher();
-        normalizedBookings = (bookingsData.data || bookingsData.bookings || []).map(normalizeBooking);
-        setBookings(normalizedBookings);
-      } catch (_bookingsErr) {
-        setBookings([]);
-      }
-      
-      fetchNotifications();
-      
-      // Fetch demo requests (status = pending_teacher)
-      try {
-        const demoData = await bookingsAPI.getDemoRequests();
-        setDemoRequests((demoData.data || demoData || []).map(normalizeBooking));
-      } catch (_demoErr) {
-        setDemoRequests([]);
-      }
-      
-      // Stats
-      setStats({
-        totalStudents: normalizedBookings.filter((b: any) => b.status === 'accepted').length,
-        upcomingClasses: normalizedBookings.filter((b: any) => b.status === 'accepted').length,
-        completedClasses: normalizedBookings.filter((b: any) => b.status === 'completed').length,
-        totalEarnings: 0
-      });
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch data');
-      console.error('Error fetching data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const totalEarnings = useMemo(
+    () => bookings
+      .filter((booking) => !booking.isDemo && (booking.status === 'accepted' || booking.status === 'completed'))
+      .reduce((sum, booking) => sum + booking.totalAmount, 0),
+    [bookings],
+  );
 
-  const getSubjectNames = (items: any[] = []): Array<{id: string, name: string}> => {
-    return items
-      .map((it) => {
-        const id = typeof it === 'object' && it !== null ? (it.id ?? it) : it;
-        const nameFromObj = typeof it === 'object' && it !== null ? it.name : undefined;
-        const subject = subjects.find((s: any) => s.id === id);
-        return { id: String(id), name: nameFromObj || subject?.name || (typeof id === 'string' ? id : String(id)) };
-      })
-      .filter((x: any) => x.name);
-  };
-
-  const handleUpdateProfile = async () => {
-    try {
-      await teachersAPI.updateProfile({ bio });
-      alert('Profile updated successfully!');
-      setIsEditingProfile(false);
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to update profile: ' + err.message);
-    }
-  };
-
-  const handleUploadDocument = async (file: File, type: string) => {
-    setUploadingFile(true);
-    try {
-      const result = await uploadAPI.uploadDocument(file, type);
-      
-      if (result.success && result.data) {
-        alert('Document uploaded successfully!');
-        fetchData();
-      } else {
-        throw new Error(result.message || 'Upload failed');
-      }
-    } catch (err: any) {
-      console.error('Document upload error:', err);
-      alert('Failed to upload document: ' + (err.message || 'Please try again'));
-    } finally {
-      setUploadingFile(false);
-    }
-  };
-
-  const handleUpdateSchedule = async (availability: any[]) => {
-    try {
-      const result = await teachersAPI.updateAvailability(availability);
-      
-      // Only show success if backend returns success
-      if (result && result.success) {
-        alert('Schedule updated successfully!');
-        setIsEditingSchedule(false);
-        fetchData();
-      } else {
-        throw new Error(result?.message || 'Failed to update schedule');
-      }
-    } catch (err: any) {
-      console.error('Schedule update error:', err);
-      alert('Failed to update schedule: ' + (err.message || 'Please try again'));
-    }
-  };
-
-  const handleAcceptDemo = async (demoId: string, meetingLink: string) => {
-    try {
-      await bookingsAPI.acceptDemo(demoId, meetingLink);
-      alert('Demo confirmed! Meeting link has been shared with the student.');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to accept demo: ' + err.message);
-    }
-  };
-
-  const handleDeclineDemo = async (demoId: string) => {
-    try {
-      await bookingsAPI.cancelDemo(demoId);
-      alert('Demo request declined.');
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to decline demo: ' + err.message);
-    }
-  };
-
-  const handleUpdateSettings = async () => {
-    try {
-      await authAPI.updateProfile({
-        name: settingsForm.name,
-        email: settingsForm.email,
-        phoneNumber: settingsForm.phoneNumber
-      });
-      setTeacher({...teacher, ...settingsForm});
-      alert('Settings updated successfully!');
-    } catch (err: any) {
-      alert('Failed to update settings: ' + err.message);
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('New passwords do not match!');
+  const handleRespond = async (booking: Booking, decision: 'accept' | 'reject') => {
+    if (decision === 'accept' && !meetingLinks[booking.id]?.trim()) {
+      toast.error('Paste the class link before accepting');
       return;
     }
-    if (passwordForm.newPassword.length < 6) {
-      alert('Password must be at least 6 characters long!');
-      return;
-    }
+
     try {
-      await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setIsChangingPassword(false);
-      alert('Password changed successfully!');
-    } catch (err: any) {
-      alert('Failed to change password: ' + err.message);
+      setSaving(true);
+      await bookingsAPI.respond(
+        booking.id,
+        decision,
+        decision === 'accept' ? meetingLinks[booking.id] : undefined,
+      );
+      toast.success(decision === 'accept' ? 'Class accepted and link shared' : 'Request rejected');
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update request');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDocumentUpload = async (file: File, type: string) => {
+    try {
+      setSaving(true);
+      await uploadAPI.uploadDocument(file, type);
+      toast.success('Document uploaded successfully');
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload document');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleProfilePictureUpload = async (file: File) => {
-    setUploadingFile(true);
     try {
-      const result = await uploadAPI.uploadProfilePicture(file);
-      
-      const newProfilePicture = result.data?.url || result.url;
-      if (!newProfilePicture) {
-        throw new Error('No URL returned from upload');
-      }
-      
-      await authAPI.updateProfile({
-        profilePicture: newProfilePicture
-      });
-      
-      setTeacher({...teacher, profilePicture: newProfilePicture});
-      setSettingsForm({...settingsForm, profilePicture: newProfilePicture});
-      alert('Profile picture updated!');
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      alert('Failed to upload profile picture: ' + (err.message || 'Please try again'));
+      setUploadingPicture(true);
+      const uploaded = await uploadAPI.uploadProfilePicture(file);
+      const updatedUser = await authAPI.updateProfile({ profilePicture: uploaded.url });
+      updateUser(updatedUser);
+      setTeacher((current) => current ? { ...current, profilePicture: updatedUser.profilePicture || uploaded.url } : current);
+      toast.success('Profile picture updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload profile picture');
     } finally {
-      setUploadingFile(false);
+      setUploadingPicture(false);
     }
   };
 
-  const handleMarkAllAsRead = async () => {
+  const handleProfileSave = async () => {
+    if (!teacher) {
+      return;
+    }
+
     try {
-      await notificationsAPI.markAllAsRead();
-      fetchNotifications();
-    } catch (err: any) {
-      console.error('Failed to mark notifications as read:', err);
+      setSaving(true);
+      const updatedUser = await authAPI.updateProfile({ name: profileForm.name });
+      const updatedTeacher = await teachersAPI.updateProfile({ bio: profileForm.bio });
+      updateUser(updatedUser);
+      setTeacher({
+        ...updatedTeacher,
+        profilePicture: updatedUser.profilePicture || updatedTeacher.profilePicture,
+      });
+      toast.success('Profile updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const renderNotifications = () => (
-    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 overflow-hidden">
-      <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-        <h3 className="font-bold text-[#4a4a4a]">Notifications</h3>
-        <button 
-          onClick={handleMarkAllAsRead}
-          className="text-xs text-[#f5a623] hover:underline"
-        >
-          Mark all as read
-        </button>
-      </div>
-      <div className="max-h-96 overflow-y-auto">
-        {notifications.length > 0 ? (
-          notifications.map((notif) => (
-            <div 
-              key={notif.id} 
-              className={`p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}
-              onClick={async () => {
-                if (!notif.read) {
-                  await notificationsAPI.markAsRead(notif.id);
-                  fetchNotifications();
-                }
-              }}
-            >
-              <div className="flex space-x-3">
-                <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!notif.read ? 'bg-blue-500' : 'bg-transparent'}`} />
-                <div className="flex-1">
-                  <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{notif.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">{new Date(notif.createdAt).toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="p-8 text-center text-gray-400">
-            <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
-            <p>No notifications yet</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const handlePasswordChange = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
 
-  if (isLoading) {
+    if (passwordForm.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await authAPI.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !teacher || !user) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-10 h-10 animate-spin text-[#f5a623]" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-[#f5a623]" />
       </div>
     );
   }
 
-  const renderOverview = () => {
-    const pendingDemos = demoRequests.filter((d: any) => d.status === 'pending_teacher');
-    const confirmedNeedingLink = bookings.filter((b: any) => b.status === 'accepted' && !b.meetingLink);
-
-    return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-[#f5a623] to-[#e09513] rounded-xl p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-2 font-['Poppins']">
-              Welcome back, {teacher?.name || 'Teacher'}!
-            </h2>
-            <p className="text-white/80">
-              {teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved'
-                ? 'You are live and accepting new students.' 
-                : 'Your profile is under review. You will be notified once approved.'}
-            </p>
-          </div>
-          <div className="hidden md:block">
-            <div className={`px-4 py-2 rounded-full ${
-              teacher?.is_live || teacher?.isLive
-                ? 'bg-green-500 text-white' 
-                : 'bg-yellow-500 text-white'
-            }`}>
-              {teacher?.is_live || teacher?.isLive ? '● Live' : '⏳ Pending'}
-            </div>
-          </div>
-        </div>
+  const renderOverview = () => (
+    <>
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard label="Pending Requests" value={pendingRequests.length} hint="Demo and paid classes waiting for your decision" />
+        <StatCard label="Upcoming Classes" value={upcomingClasses.length} hint="Accepted classes visible to students" />
+        <StatCard label="Students" value={students.length} hint="Active students in your schedule" />
+        <StatCard label="Earnings" value={`$${totalEarnings.toFixed(2)}`} hint="Accepted and completed paid classes" />
       </div>
 
-      {/* Action Center */}
-      {(pendingDemos.length > 0 || confirmedNeedingLink.length > 0) && (
-        <div className="bg-white rounded-xl shadow-lg border-2 border-[#f5a623]/20 overflow-hidden">
-          <div className="bg-[#f5a623]/5 p-4 border-b border-[#f5a623]/10">
-            <h3 className="text-lg font-bold text-[#4a4a4a] flex items-center">
-              <Bell className="w-5 h-5 mr-2 text-[#f5a623]" />
-              Action Center
-            </h3>
-          </div>
-          <div className="p-4 space-y-4">
-            {pendingDemos.map((demo) => (
-              <DemoRequestCard 
-                key={demo.id} 
-                demo={demo} 
-                onAccept={handleAcceptDemo}
-                onDecline={handleDeclineDemo}
-              />
-            ))}
-            {confirmedNeedingLink.map((booking) => (
-              <div key={booking.id} className="bg-white rounded-lg p-4 border border-blue-200">
-                <div className="flex items-start justify-between mb-3">
+      <Panel title="Incoming Requests" description="Accept requests with a class link or reject them right here.">
+        <div className="space-y-4">
+          {pendingRequests.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+              No pending requests right now.
+            </div>
+          ) : pendingRequests.map((booking) => (
+            <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center space-x-2">
-                      <p className="font-medium text-[#4a4a4a]">{booking.studentName || 'Student'}</p>
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Paid Class</span>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-slate-950">{booking.subjectName}</h3>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(booking.status)}`}>
+                        {booking.isDemo ? 'Demo request' : 'Paid request'}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600">{booking.subjectName} • {booking.gradeLevel}</p>
-                    <p className="text-sm font-medium text-blue-600">
-                      {new Date(booking.scheduledDate).toLocaleDateString()} at{' '}
-                      {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <p className="mt-1 text-sm text-slate-600">{booking.studentName} on {new Date(booking.scheduledDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {booking.isDemo ? 'Free demo class' : `$${booking.totalAmount.toFixed(2)} confirmed by admin once approved`}
                     </p>
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                    Verified
-                  </span>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-500">Student is waiting for the class link</p>
-                  <div className="flex space-x-2">
-                    <input
-                      type="url"
-                      placeholder="Paste class link (Zoom/Meet)"
-                      className="form-input text-sm"
-                      id={`link-${booking.id}`}
-                    />
-                    <button
-                      onClick={() => {
-                        const input = document.getElementById(`link-${booking.id}`) as HTMLInputElement;
-                        if (input?.value) {
-                          handleAcceptDemo(booking.id, input.value); // Reusing meeting link update logic
-                        }
-                      }}
-                      className="btn-primary text-sm py-2 px-4 whitespace-nowrap"
+                  {booking.receiptUrl && (
+                    <a
+                      href={booking.receiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-[#d99018]"
                     >
-                      Create Class
+                      View receipt
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 lg:flex-row">
+                  <input
+                    type="url"
+                    value={meetingLinks[booking.id] || booking.meetingLink || ''}
+                    onChange={(event) => setMeetingLinks((current) => ({
+                      ...current,
+                      [booking.id]: event.target.value,
+                    }))}
+                    placeholder="Paste Zoom, Meet, or Teams link"
+                    className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRespond(booking, 'accept')}
+                      className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                    >
+                      Accept & Create Class
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRespond(booking, 'reject')}
+                      className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                    >
+                      Reject
                     </button>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </article>
+          ))}
         </div>
-      )}
+      </Panel>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Students</p>
-              <p className="stat-value">{stats?.totalStudents || 0}</p>
+      <Panel title="Upcoming Classes" description="Accepted classes already visible to students.">
+        <div className="space-y-4">
+          {upcomingClasses.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+              No upcoming classes yet.
             </div>
-            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-              <Users className="w-7 h-7 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Upcoming Classes</p>
-              <p className="stat-value text-[#f5a623]">{stats?.upcomingClasses || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-              <Calendar className="w-7 h-7 text-[#f5a623]" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Completed Classes</p>
-              <p className="stat-value text-green-600">{stats?.completedClasses || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Earnings</p>
-              <p className="stat-value text-purple-600">${stats?.totalEarnings || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center">
-              <DollarSign className="w-7 h-7 text-purple-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Upcoming Classes */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Upcoming Classes</h3>
-          <button 
-            onClick={() => setActiveTab('schedule')}
-            className="text-[#f5a623] text-sm hover:underline flex items-center space-x-1"
-            title="View All Schedule"
-          >
-            <span>View All</span>
-            <ChevronRight className="w-4 h-4" />
-            <span className="sr-only">View All Schedule</span>
-          </button>
-        </div>
-        
-        <div className="space-y-3">
-          {bookings
-            .filter((b: any) => b.status === 'accepted')
-            .slice(0, 3)
-            .map((booking: any) => (
-            <div key={booking.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-                  <Video className="w-6 h-6 text-[#f5a623]" />
-                </div>
+          ) : upcomingClasses.map((booking) => (
+            <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="font-medium text-[#4a4a4a]">{booking.subjectName} Class</p>
-                  <p className="text-sm text-gray-500">
-                    {new Date(booking.scheduledDate).toLocaleDateString()} at {new Date(booking.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <p className="text-xs text-[#f5a623]">${booking.pricePerHour}/hour • {booking.gradeLevel}</p>
-                  {booking.is_demo && (
-                    <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-950">{booking.subjectName}</h3>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(booking.status)}`}>
+                      {booking.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{booking.studentName} on {new Date(booking.scheduledDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
                 </div>
-              </div>
-              {booking.meetingLink ? (
-                <a 
-                  href={booking.meetingLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary text-sm py-2 px-4"
-                >
-                  Join
-                </a>
-              ) : (
-                <span className="text-sm text-gray-500">Waiting for link...</span>
-              )}
-            </div>
-          ))}
-          {bookings.filter((b: any) => b.status === 'accepted').length === 0 && (
-            <p className="text-center text-gray-500 py-4">No upcoming classes</p>
-          )}
-        </div>
-      </div>
-
-      {/* Profile Summary */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Profile Summary</h3>
-          <button 
-            onClick={() => setIsEditingProfile(true)}
-            className="text-[#f5a623] text-sm hover:underline flex items-center space-x-1"
-            title="Edit Profile"
-          >
-            <Edit className="w-4 h-4" />
-            <span>Edit</span>
-            <span className="sr-only">Edit Profile</span>
-          </button>
-        </div>
-        
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <p className="text-sm text-gray-500 mb-1">Bio</p>
-            <p className="text-[#4a4a4a]">{teacher?.bio || 'No bio added yet.'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 mb-1">Subjects I Teach</p>
-            <div className="flex flex-wrap gap-2">
-              {getSubjectNames(teacher?.subjects).map((sub: any) => (
-                <span key={sub.id} className="px-3 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-sm">
-                  {sub.name}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 mb-1">Rating</p>
-            <div className="flex items-center space-x-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star key={star} className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-              ))}
-              <span className="ml-2 text-gray-600">(4.9)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    );
-  };
-
-  const renderSchedule = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">My Schedule</h3>
-        <button 
-          onClick={() => setIsEditingSchedule(true)}
-          className="btn-primary flex items-center space-x-2"
-          title="Edit Schedule"
-        >
-          <Edit className="w-4 h-4" />
-          <span>Edit Schedule</span>
-          <span className="sr-only">Edit Schedule</span>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="grid grid-cols-7 border-b">
-          {days.map((day) => (
-            <div key={day} className="p-4 text-center border-r last:border-r-0 bg-gray-50">
-              <p className="font-semibold text-[#4a4a4a] capitalize">{day}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 min-h-[300px]">
-          {days.map((day) => {
-            const slots = teacher?.availability?.filter((s: any) => s.day === day) || [];
-            return (
-              <div key={day} className="p-4 border-r last:border-r-0">
-                {slots.length > 0 ? (
-                  <div className="space-y-2">
-                    {slots.map((slot: any) => (
-                      <div 
-                        key={slot.id} 
-                        className={`p-2 rounded-lg text-center text-sm ${
-                          slot.isAvailable 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-500'
-                        }`}
-                      >
-                        <Clock className="w-4 h-4 mx-auto mb-1" />
-                        <p>{slot.startTime} - {slot.endTime}</p>
-                      </div>
-                    ))}
-                  </div>
+                {booking.meetingLink ? (
+                  <a
+                    href={booking.meetingLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                  >
+                    <Video className="h-4 w-4" />
+                    Open class link
+                  </a>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-                    No slots
-                  </div>
+                  <span className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700">Link missing</span>
                 )}
               </div>
-            );
-          })}
+            </article>
+          ))}
         </div>
-      </div>
-
-      {/* Availability Legend */}
-      <div className="flex items-center space-x-6">
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 bg-green-100 rounded" />
-          <span className="text-sm text-gray-600">Available</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 bg-gray-100 rounded" />
-          <span className="text-sm text-gray-600">Unavailable</span>
-        </div>
-      </div>
-    </div>
+      </Panel>
+    </>
   );
 
-  const DemoRequestCard: React.FC<{
-    demo: any;
-    onAccept: (id: string, meetingLink: string) => void;
-    onDecline: (id: string) => void;
-  }> = ({ demo, onAccept, onDecline }) => {
-    const [meetingLink, setMeetingLink] = useState('');
-    const [showAcceptForm, setShowAcceptForm] = useState(false);
-    const isPending = demo.status === 'pending_teacher';
-
-    return (
-      <div className="bg-white rounded-lg p-4 border border-yellow-200">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="font-medium text-[#4a4a4a]">{demo.student_name || demo.studentName || 'New Student'}</p>
-            <p className="text-sm text-gray-600">{demo.student_email || demo.studentEmail}</p>
-            <p className="text-sm text-gray-500">{demo.subject_name || demo.subjectName}</p>
-            <p className="text-sm font-medium text-[#f5a623]">
-              {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleDateString()} at{' '}
-              {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-            {demo.is_demo && (
-              <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full mt-1">Demo</span>
-            )}
+  const renderStudents = () => (
+    <Panel title="Students" description="Students with accepted or completed classes.">
+      <div className="space-y-4">
+        {students.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+            Your student list will populate once classes are accepted.
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-            isPending ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
-          }`}>
-            {isPending ? 'Pending' : 'Confirmed'}
-          </span>
-        </div>
-
-        {isPending && (
-          showAcceptForm ? (
-            <div className="space-y-2">
-              <input
-                type="url"
-                placeholder="Paste Zoom or Google Meet link"
-                value={meetingLink}
-                onChange={(e) => setMeetingLink(e.target.value)}
-                className="form-input text-sm"
-              />
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => {
-                    onAccept(demo.id, meetingLink);
-                    setShowAcceptForm(false);
-                  }}
-                  disabled={!meetingLink.trim()}
-                  className="flex-1 btn-primary text-sm py-2"
-                >
-                  Confirm & Send Link
-                </button>
-                <button
-                  onClick={() => setShowAcceptForm(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
+        ) : students.map((studentItem) => (
+          <article key={studentItem.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-950">{studentItem.name}</h3>
+                <p className="mt-1 text-sm text-slate-600">{studentItem.email || 'No email available'}</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  {studentItem.bookings} class request{studentItem.bookings === 1 ? '' : 's'} tracked
+                </p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                {studentItem.nextClass
+                  ? `Next ${studentItem.subjectName || 'class'} on ${new Date(studentItem.nextClass).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`
+                  : 'No upcoming class'}
               </div>
             </div>
-          ) : (
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setShowAcceptForm(true)}
-                className="flex-1 btn-primary text-sm py-2"
-              >
-                Accept
-              </button>
-              <button
-                onClick={() => onDecline(demo.id)}
-                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
-              >
-                Decline
-              </button>
-            </div>
-          )
-        )}
-        
-        {!isPending && demo.meeting_link && (
-          <a href={demo.meeting_link || demo.meetingLink} target="_blank" rel="noopener noreferrer" className="btn-primary text-sm py-2 inline-flex items-center space-x-2">
-            <Video className="w-4 h-4" />
-            <span>Join Meeting</span>
-          </a>
-        )}
+          </article>
+        ))}
       </div>
-    );
-  };
-
-  const renderStudents = () => {
-    const pendingDemos = demoRequests.filter((d: any) => d.status === 'pending_teacher');
-    const confirmedDemos = demoRequests.filter((d: any) => d.status === 'accepted');
-    
-    return (
-    <div className="space-y-6">
-      {/* Demo Requests Section */}
-      {(pendingDemos.length > 0 || confirmedDemos.length > 0) && (
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-200">
-          <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins'] mb-4">Demo Class Requests</h3>
-          
-          {pendingDemos.length > 0 && (
-            <div className="mb-4">
-              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
-                <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                Pending Requests ({pendingDemos.length})
-              </h4>
-              <div className="space-y-3">
-                {pendingDemos.map((demo: any) => (
-                  <DemoRequestCard 
-                    key={demo.id} 
-                    demo={demo} 
-                    onAccept={handleAcceptDemo}
-                    onDecline={handleDeclineDemo}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {confirmedDemos.length > 0 && (
-            <div>
-              <h4 className="font-medium text-gray-700 mb-2 flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                Upcoming Demo Classes ({confirmedDemos.length})
-              </h4>
-              <div className="space-y-3">
-                {confirmedDemos.map((demo: any) => (
-                  <div key={demo.id} className="bg-white rounded-lg p-4 border border-green-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-[#4a4a4a]">{demo.student_name || demo.studentName || 'Student'}</p>
-                        <p className="text-sm text-gray-600">{demo.subject_name || demo.subjectName}</p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleDateString()} at {new Date(demo.scheduled_date || demo.scheduledDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                        {(demo.meeting_link || demo.meetingLink) && (
-                          <a href={demo.meeting_link || demo.meetingLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                            Join Meeting
-                          </a>
-                        )}
-                      </div>
-                      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                        Confirmed
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">My Students</h3>
-      
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>Student</th>
-              <th>Subject</th>
-              <th>Grade Level</th>
-              <th>Classes Taken</th>
-              <th>Next Class</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings
-              .filter((b: any) => b.status === 'accepted' || b.status === 'completed')
-              .map((booking: any) => (
-              <tr key={booking.id}>
-                <td>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-                      <span className="text-[#f5a623] font-bold">
-                        {(booking.studentName || 'S').charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="font-medium text-[#4a4a4a]">{booking.studentName || 'Student'}</span>
-                      <p className="text-xs text-gray-500">{booking.studentEmail}</p>
-                    </div>
-                  </div>
-                </td>
-                <td>{booking.subjectName}</td>
-                <td>{booking.gradeLevel}</td>
-                <td>{booking.status === 'completed' ? '1' : '0'}</td>
-                <td>{new Date(booking.scheduledDate).toLocaleDateString()}</td>
-              </tr>
-            ))}
-            {bookings.length === 0 && (
-              <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-500">
-                  No students yet
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </Panel>
   );
-  };
 
   const renderDocuments = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">My Documents</h3>
-      
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-[#4a4a4a]">Highest Degree</h4>
-            <span className={`badge ${teacher?.highestDegree ? 'badge-approved' : 'badge-pending'}`}>
-              {teacher?.highestDegree ? 'Verified' : 'Pending'}
-            </span>
-          </div>
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
-            <FileText className="w-10 h-10 text-[#f5a623]" />
-            <div>
-              <p className="font-medium text-[#4a4a4a]">{teacher?.highestDegree?.fileName || 'No document uploaded'}</p>
-              {teacher?.highestDegree && (
-                <p className="text-sm text-gray-500">
-                  Uploaded on {new Date(teacher.highestDegree.uploadedAt).toLocaleDateString()}
-                </p>
+    <Panel title="Documents" description="Upload and review your verification documents.">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          { key: 'degree', label: 'Degree', item: teacher.highestDegree },
+          { key: 'identity', label: 'Identity Document', item: teacher.identityDocument },
+          { key: 'certificate', label: 'Certificate', item: teacher.teachingCertificates?.[0] || null },
+        ].map((entry) => (
+          <article key={entry.key} className="rounded-3xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-950">{entry.label}</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {entry.item?.fileName || `Upload your ${entry.label.toLowerCase()}`}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {entry.item?.fileUrl && (
+                <a
+                  href={entry.item.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]"
+                >
+                  View
+                </a>
               )}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950">
+                <Upload className="h-4 w-4" />
+                Upload
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      handleDocumentUpload(file, entry.key);
+                    }
+                  }}
+                />
+              </label>
             </div>
-          </div>
-          <div className="mt-4 flex space-x-2">
-            <button className="flex-1 btn-secondary text-sm py-2" title="View Document">View</button>
-            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer" title="Update Degree Document">
-              <Upload className="w-4 h-4" />
-              <span>{uploadingFile ? 'Uploading...' : 'Update'}</span>
-              <input 
-                type="file" 
-                className="hidden" 
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'degree')}
-                disabled={uploadingFile}
-                aria-label="Upload Degree Document"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-[#4a4a4a]">Identity Document</h4>
-            <span className={`badge ${teacher?.identityDocument ? 'badge-approved' : 'badge-pending'}`}>
-              {teacher?.identityDocument ? 'Verified' : 'Pending'}
-            </span>
-          </div>
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
-            <FileText className="w-10 h-10 text-[#f5a623]" />
-            <div>
-              <p className="font-medium text-[#4a4a4a]">{teacher?.identityDocument?.fileName || 'No document uploaded'}</p>
-              {teacher?.identityDocument && (
-                <p className="text-sm text-gray-500">
-                  Uploaded on {new Date(teacher.identityDocument.uploadedAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="mt-4 flex space-x-2">
-            <button className="flex-1 btn-secondary text-sm py-2" title="View Document">View</button>
-            <label className="flex-1 btn-primary text-sm py-2 flex items-center justify-center space-x-1 cursor-pointer" title="Update Identity Document">
-              <Upload className="w-4 h-4" />
-              <span>{uploadingFile ? 'Uploading...' : 'Update'}</span>
-              <input 
-                type="file" 
-                className="hidden" 
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'identity')}
-                disabled={uploadingFile}
-                aria-label="Upload Identity Document"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-[#4a4a4a]">Teaching Certificates</h4>
-            <span className="badge badge-approved">Verified</span>
-          </div>
-          {teacher?.teachingCertificates?.map((cert: any, index: number) => (
-            <div key={index} className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg mb-2">
-              <FileText className="w-10 h-10 text-[#f5a623]" />
-              <div>
-                <p className="font-medium text-[#4a4a4a]">{cert.fileName}</p>
-                <p className="text-sm text-gray-500">
-                  Uploaded on {new Date(cert.uploadedAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          ))}
-          <label className="w-full btn-primary text-sm py-2 flex items-center justify-center space-x-1 mt-4 cursor-pointer" title="Add Teaching Certificate">
-            <Upload className="w-4 h-4" />
-            <span>{uploadingFile ? 'Uploading...' : 'Add Certificate'}</span>
-            <input 
-              type="file" 
-              className="hidden" 
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => e.target.files?.[0] && handleUploadDocument(e.target.files[0], 'certificate')}
-              disabled={uploadingFile}
-              aria-label="Upload Teaching Certificate"
-            />
-          </label>
-        </div>
+          </article>
+        ))}
       </div>
-    </div>
+    </Panel>
   );
 
-  const renderSettings = () => (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Profile Picture */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Profile Picture</h3>
-          <div className="flex flex-col items-center">
-            <img 
-              src={teacher?.profile_picture || teacher?.profilePicture || settingsForm.profilePicture || '/default-avatar.png'} 
-              alt="Profile"
-              className="w-32 h-32 rounded-full object-cover border-4 border-[#f5a623] mb-4"
+  const renderProfile = () => (
+    <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+      <Panel title="Profile" description="Update the public details students see on your dashboard card.">
+        <div className="grid gap-6 md:grid-cols-[220px,1fr]">
+          <div className="rounded-3xl bg-slate-50 p-5 text-center">
+            <img
+              src={teacher.profilePicture || '/default-avatar.png'}
+              alt={teacher.name}
+              className="mx-auto h-32 w-32 rounded-3xl object-cover"
             />
-            <label className="btn-primary py-2 px-6 flex items-center space-x-2 cursor-pointer">
-              <Upload className="w-4 h-4" />
-              <span>{uploadingFile ? 'Uploading...' : 'Change Picture'}</span>
-              <input 
-                type="file" 
-                className="hidden" 
+            <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]">
+              <Upload className="h-4 w-4" />
+              {uploadingPicture ? 'Uploading...' : 'Change picture'}
+              <input
+                type="file"
                 accept="image/*"
-                onChange={(e) => e.target.files?.[0] && handleProfilePictureUpload(e.target.files[0])}
-                disabled={uploadingFile}
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    handleProfilePictureUpload(file);
+                  }
+                }}
+                disabled={uploadingPicture}
               />
             </label>
           </div>
-        </div>
 
-        {/* Personal Information */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Personal Information</h3>
           <div className="space-y-4">
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <UserIcon className="w-4 h-4" />
-                <span>Full Name</span>
-              </label>
-              <input 
-                type="text" 
-                className="form-input"
-                value={settingsForm.name}
-                onChange={(e) => setSettingsForm({...settingsForm, name: e.target.value})}
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Full name</span>
+              <input
+                type="text"
+                value={profileForm.name}
+                onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
               />
-            </div>
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <Mail className="w-4 h-4" />
-                <span>Email Address</span>
-              </label>
-              <input 
-                type="email" 
-                className="form-input"
-                value={settingsForm.email}
-                onChange={(e) => setSettingsForm({...settingsForm, email: e.target.value})}
+            </label>
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input
+                type="email"
+                value={teacher.email}
+                readOnly
+                className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500 outline-none"
               />
-            </div>
-            <div>
-              <label className="form-label flex items-center space-x-2">
-                <Phone className="w-4 h-4" />
-                <span>Phone Number</span>
-              </label>
-              <input 
-                type="tel" 
-                className="form-input"
-                value={settingsForm.phoneNumber}
-                onChange={(e) => setSettingsForm({...settingsForm, phoneNumber: e.target.value})}
-                placeholder="+1 (555) 000-0000"
+            </label>
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Bio</span>
+              <textarea
+                rows={6}
+                value={profileForm.bio}
+                onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
               />
-            </div>
-            <button 
-              onClick={handleUpdateSettings}
-              className="btn-primary w-full mt-6"
+            </label>
+            <button
+              type="button"
+              onClick={handleProfileSave}
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+              disabled={saving}
             >
-              Save Changes
+              <Save className="h-4 w-4" />
+              Save profile
             </button>
           </div>
         </div>
-      </div>
+      </Panel>
 
-      {/* Password & Security */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-[#4a4a4a] font-['Poppins']">Password & Security</h3>
-          <button 
-            onClick={() => setIsChangingPassword(!isChangingPassword)}
-            className="text-[#f5a623] text-sm hover:underline"
+      <Panel title="Security" description="Keep your teacher account protected.">
+        <div className="space-y-4">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Current password</span>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">New password</span>
+            <input
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Confirm new password</span>
+            <input
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handlePasswordChange}
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#f5a623] hover:text-[#d99018]"
+            disabled={saving}
           >
-            {isChangingPassword ? 'Cancel' : 'Change Password'}
+            Update password
           </button>
         </div>
-
-        {isChangingPassword ? (
-          <div className="space-y-4">
-            <div>
-              <label className="form-label">Current Password</label>
-              <div className="relative">
-                <input 
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  className="form-input pr-10"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                >
-                  {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="form-label">New Password</label>
-              <div className="relative">
-                <input 
-                  type={showNewPassword ? 'text' : 'password'}
-                  className="form-input pr-10"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                >
-                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="form-label">Confirm Password</label>
-              <div className="relative">
-                <input 
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  className="form-input pr-10"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-blue-700">
-                Password must be at least 6 characters long.
-              </p>
-            </div>
-
-            <button 
-              onClick={handleChangePassword}
-              className="btn-primary w-full"
-            >
-              Update Password
-            </button>
-          </div>
-        ) : (
-          <div className="bg-green-50 p-4 rounded-lg">
-            <p className="text-sm text-green-700">
-              ✓ Your password is secure. Change it periodically for better security.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Account Information */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Account Information</h3>
-        <div className="space-y-3">
-          <div className="flex justify-between items-center py-3 border-b">
-            <span className="text-gray-600">Account Status</span>
-            <span className={`badge ${teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved' ? 'badge-approved' : 'badge-pending'}`}>
-              {teacher?.verification_status === 'approved' || teacher?.verificationStatus === 'approved' ? 'Verified' : 'Pending'}
-            </span>
-          </div>
-          <div className="flex justify-between items-center py-3 border-b">
-            <span className="text-gray-600">Member Since</span>
-            <span className="text-gray-900">{teacher?.createdAt ? new Date(teacher.createdAt).toLocaleDateString() : 'N/A'}</span>
-          </div>
-          <div className="flex justify-between items-center py-3">
-            <span className="text-gray-600">Account ID</span>
-            <span className="text-gray-900 font-mono text-sm">{teacher?.id}</span>
-          </div>
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 
   return (
-    <div className="dashboard-layout">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="p-6">
-          <div className="flex items-center space-x-3 mb-8">
-            <img 
-              src={teacher?.profile_picture || teacher?.profilePicture || '/default-avatar.png'} 
-              alt={teacher?.name}
-              className="w-12 h-12 rounded-full object-cover border-2 border-[#f5a623]"
-            />
-            <div>
-              <p className="font-semibold text-white">{teacher?.name}</p>
-              <p className="text-xs text-white/60">Teacher</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`sidebar-nav-item w-full ${activeTab === item.id ? 'active' : ''}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <button 
-            onClick={logout}
-            className="sidebar-nav-item w-full text-red-400 hover:text-red-300"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <h1 className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">
-            {sidebarItems.find(i => i.id === activeTab)?.label}
-          </h1>
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
-                title="Notifications"
-              >
-                <Bell className="w-5 h-5 text-gray-600" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full animate-pulse">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </button>
-              {showNotifications && renderNotifications()}
-            </div>
-          </div>
-        </header>
-
-        <div className="dashboard-content">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">
-              {error}
-            </div>
-          )}
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'schedule' && renderSchedule()}
-          {activeTab === 'students' && renderStudents()}
-          {activeTab === 'documents' && renderDocuments()}
-          {activeTab === 'settings' && renderSettings()}
-        </div>
-      </main>
-
-      {/* Edit Profile Modal */}
-      {isEditingProfile && (
-        <div className="modal-overlay" onClick={() => setIsEditingProfile(false)}>
-          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Edit Profile</h3>
-              <button onClick={() => setIsEditingProfile(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleUpdateProfile(); }}>
-              <div>
-                <label className="form-label">Bio</label>
-                <textarea 
-                  className="form-input min-h-[100px]"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Tell students about your teaching experience..."
-                />
-              </div>
-              <button type="submit" className="btn-primary w-full">
-                Save Changes
-              </button>
-            </form>
-          </div>
-        </div>
+    <DashboardLayout
+      title={NAV_ITEMS.find((item) => item.id === activeTab)?.label || 'Teacher Dashboard'}
+      subtitle="Manage requests, publish availability, and keep class links ready for students."
+      userName={teacher.name}
+      roleLabel="Teacher"
+      avatarUrl={teacher.profilePicture}
+      navItems={[...NAV_ITEMS]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      onLogout={logout}
+    >
+      {activeTab === 'overview' && renderOverview()}
+      {activeTab === 'schedule' && (
+        <Panel title="Availability Schedule" description="Students see these time windows when booking demo or paid classes.">
+          <SchedulesPage
+            teacherId={teacher.id}
+            currentAvailability={teacher.availability}
+            onSave={(availability) => setTeacher((current) => current ? { ...current, availability } : current)}
+          />
+        </Panel>
       )}
-
-      {/* Edit Schedule Modal */}
-      {isEditingSchedule && (
-        <div className="modal-overlay" onClick={() => setIsEditingSchedule(false)}>
-          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Edit Schedule</h3>
-              <button onClick={() => setIsEditingSchedule(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              {days.map((day) => (
-                <div key={day} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                  <span className="w-24 font-medium capitalize">{day}</span>
-                  <input type="time" className="form-input w-32" defaultValue="09:00" />
-                  <span>to</span>
-                  <input type="time" className="form-input w-32" defaultValue="17:00" />
-                  <label className="flex items-center space-x-2">
-                    <input type="checkbox" defaultChecked className="w-4 h-4 text-[#f5a623]" />
-                    <span className="text-sm">Available</span>
-                  </label>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 flex space-x-4">
-              <button 
-                onClick={() => setIsEditingSchedule(false)}
-                className="flex-1 btn-secondary"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleUpdateSchedule}
-                className="flex-1 btn-primary"
-              >
-                Save Schedule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {activeTab === 'students' && renderStudents()}
+      {activeTab === 'documents' && renderDocuments()}
+      {activeTab === 'profile' && renderProfile()}
+    </DashboardLayout>
   );
 };
 

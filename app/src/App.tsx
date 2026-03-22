@@ -1,50 +1,62 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Navigation from '@/sections/Navigation';
-import Hero from '@/sections/Hero';
-import HowItWorks from '@/sections/HowItWorks';
-import Testimonials from '@/sections/Testimonials';
-import Subjects from '@/sections/Subjects';
-import DirectorIntro from '@/sections/DirectorIntro';
-import Footer from '@/sections/Footer';
+import React, { Suspense, lazy, useState } from 'react';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import AuthModal from '@/components/AuthModal';
-import AdminDashboard from '@/pages/dashboard/AdminDashboard';
-import TeacherDashboard from '@/pages/dashboard/TeacherDashboard';
-import StudentDashboard from '@/pages/dashboard/StudentDashboard';
-import OurTeam from '@/pages/our-team';
-import ContactUs from '@/pages/contact-us';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { NotificationProvider } from '@/context/NotificationContext';
+import type { UserRole } from '@/types';
+import AdminDashboard from '@/pages/dashboard/AdminDashboard';
+import StudentDashboard from '@/pages/dashboard/StudentDashboard';
+import TeacherDashboard from '@/pages/dashboard/TeacherDashboard';
+import DirectorIntro from '@/sections/DirectorIntro';
+import Footer from '@/sections/Footer';
+import Hero from '@/sections/Hero';
+import HowItWorks from '@/sections/HowItWorks';
+import Navigation from '@/sections/Navigation';
+import Subjects from '@/sections/Subjects';
+import Testimonials from '@/sections/Testimonials';
 import './App.css';
 
-// Landing Page Component
-const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => void }> = ({ 
-  onLoginClick, 
-  onRegisterClick 
-}) => {
-  // ...existing code...
-  return (
-    <div className="min-h-screen bg-white">
-      <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
-      <Hero onGetStarted={onRegisterClick} />
-      <HowItWorks />
-      <Testimonials />
-      <Subjects onLoginClick={onLoginClick} />
-      <DirectorIntro 
-        directorName="Rubina Altaf"
-        directorTitle="Director"
-        directorIntro="25+ Years of Experiance in the Field of education"
-        directorImage="/director-image.png"
-      />
-      <Footer />
-    </div>
-  );
-};
+const PricingPage = lazy(() => import('./pages/PricingPage'));
+const AboutUsPage = lazy(() => import('./pages/AboutUsPage'));
+const ContactUsPage = lazy(() => import('./pages/ContactUsPage'));
+const FAQsPage = lazy(() => import('./pages/FAQsPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const BlogPage = lazy(() => import('./pages/BlogPage'));
+const OurTeamPage = lazy(() => import('./pages/OurTeamPage'));
 
-// Protected Route Component
-const ProtectedRoute: React.FC<{ 
-  children: React.ReactNode; 
-  allowedRoles?: string[];
+const LandingPage: React.FC<{ onLoginClick: () => void; onRegisterClick: () => void }> = ({
+  onLoginClick,
+  onRegisterClick,
+}) => (
+  <div className="min-h-screen bg-white">
+    <Navigation onLoginClick={onLoginClick} onRegisterClick={onRegisterClick} />
+    <Hero onGetStarted={onRegisterClick} />
+    <HowItWorks />
+    <Testimonials />
+    <Subjects onLoginClick={onLoginClick} />
+    <DirectorIntro
+      directorName="Rubina Altaf"
+      directorTitle="Director"
+      directorIntro="25+ Years of Experiance in the Field of education"
+      directorImage="/director-image.png"
+    />
+    <Footer />
+  </div>
+);
+
+const LazyPage: React.FC<{ children: React.ReactNode; message?: string }> = ({
+  children,
+  message = 'Loading...',
+}) => (
+  <Suspense fallback={<div className="py-8 text-center">{message}</div>}>
+    {children}
+  </Suspense>
+);
+
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  allowedRoles?: UserRole[];
 }> = ({ children, allowedRoles }) => {
   const { user, isAuthenticated } = useAuth();
 
@@ -59,31 +71,27 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-// Dashboard Router
 const DashboardRouter: React.FC = () => {
   const { user } = useAuth();
 
-  if (!user) return <Navigate to="/" replace />;
-
-  switch (user.role) {
-    case 'admin':
-      return <AdminDashboard />;
-    case 'teacher':
-      return <TeacherDashboard />;
-    case 'student':
-      return <StudentDashboard />;
-    default:
-      return <Navigate to="/" replace />;
+  if (!user) {
+    return <Navigate to="/" replace />;
   }
+
+  const dashboards: Record<UserRole, React.ReactElement> = {
+    admin: <AdminDashboard />,
+    teacher: <TeacherDashboard />,
+    student: <StudentDashboard />,
+  };
+
+  return dashboards[user.role] ?? <Navigate to="/" replace />;
 };
 
-// Main App Content
 const AppContent: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  // Always open modal in correct mode
   const openLogin = () => {
     setAuthMode('login');
     setIsAuthModalOpen(true);
@@ -94,104 +102,79 @@ const AppContent: React.FC = () => {
     setIsAuthModalOpen(true);
   };
 
-  return (
-      <>
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
-              ) : (
-                <LandingPage 
-                  onLoginClick={openLogin} 
-                  onRegisterClick={openRegister} 
-                />
-              )
-            } 
-          />
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <DashboardRouter />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin" 
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/teacher" 
-            element={
-              <ProtectedRoute allowedRoles={["teacher"]}>
-                <TeacherDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/student" 
-            element={
-              <ProtectedRoute allowedRoles={["student"]}>
-                <StudentDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route path="/pricing" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading pricing...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/PricingPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/our-team" element={<OurTeam />} />
-          <Route path="/about-us" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/AboutUsPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/contact-us" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/ContactUsPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/faqs" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/FAQsPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/terms" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/TermsPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/privacy" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/PrivacyPage')))}
-            </React.Suspense>
-          } />
-          <Route path="/blog" element={
-            <React.Suspense fallback={<div className="py-8 text-center">Loading blog...</div>}>
-              {React.createElement(React.lazy(() => import('./pages/BlogPage')))}
-            </React.Suspense>
-          } />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white text-[#4a4a4a]">
+        Loading...
+      </div>
+    );
+  }
 
-        {/* AuthModal always receives correct mode */}
-        <AuthModal 
-          isOpen={isAuthModalOpen} 
-          onClose={() => setIsAuthModalOpen(false)}
-          initialMode={authMode}
+  return (
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <LandingPage onLoginClick={openLogin} onRegisterClick={openRegister} />
+            )
+          }
         />
-      </>
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardRouter />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teacher"
+          element={
+            <ProtectedRoute allowedRoles={['teacher']}>
+              <TeacherDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student"
+          element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/pricing" element={<LazyPage message="Loading pricing..."><PricingPage /></LazyPage>} />
+        <Route path="/our-team" element={<LazyPage><OurTeamPage /></LazyPage>} />
+        <Route path="/about-us" element={<LazyPage><AboutUsPage /></LazyPage>} />
+        <Route path="/contact-us" element={<LazyPage><ContactUsPage /></LazyPage>} />
+        <Route path="/faqs" element={<LazyPage><FAQsPage /></LazyPage>} />
+        <Route path="/terms" element={<LazyPage><TermsPage /></LazyPage>} />
+        <Route path="/privacy" element={<LazyPage><PrivacyPage /></LazyPage>} />
+        <Route path="/blog" element={<LazyPage message="Loading blog..."><BlogPage /></LazyPage>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authMode}
+      />
+    </>
   );
 };
 
-// Main App
 function App() {
   return (
     <AuthProvider>

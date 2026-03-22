@@ -1,1554 +1,730 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, Users, UserCheck, CreditCard, 
-  Calendar, Settings, LogOut, CheckCircle, XCircle,
-  Eye, FileText, Bell, Search, Filter, BookOpen,
-  Plus, Edit2, Trash2, DollarSign, Loader2, Star, User, Building2
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  BookOpen,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  CreditCard,
+  GraduationCap,
+  Loader2,
+  Plus,
+  Settings,
+  Users,
+  UserCheck,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
-import { adminAPI, teachersAPI, subjectsAPI, paymentsAPI, settingsAPI, bookingsAPI } from '@/services/api';
-import type { Teacher, Subject } from '@/types';
 import BankDetailsPage from '@/pages/admin/BankDetailsPage';
+import { adminAPI, bookingsAPI, paymentsAPI, subjectsAPI, teachersAPI } from '@/services/api';
+import type { AdminStats, Booking, Student, Subject, Teacher } from '@/types';
 
-// Helper to normalize booking fields
-const normalizeBooking = (booking: any) => ({
-  ...booking,
-  teacherId: booking.teacher_id || booking.teacherId,
-  studentId: booking.student_id || booking.studentId,
-  subjectId: booking.subject_id || booking.subjectId,
-  scheduledDate: booking.scheduled_date || booking.scheduledDate,
-  pricePerHour: booking.price_per_hour || booking.pricePerHour,
-  totalAmount: booking.total_amount || booking.totalAmount,
-  meetingLink: booking.meeting_link || booking.meetingLink,
-  gradeLevel: booking.grade_level || booking.gradeLevel,
-  isDemo: booking.is_demo ?? booking.isDemo,
-  receiptUrl: booking.receipt_url || booking.receiptUrl,
-  createdAt: booking.created_at || booking.createdAt,
-  studentName: booking.student_name || booking.studentName,
-  studentEmail: booking.student_email || booking.studentEmail,
-  teacherName: booking.teacher_name || booking.teacherName,
-  teacherEmail: booking.teacher_email || booking.teacherEmail,
-  subjectName: booking.subject_name || booking.subjectName,
-  status: booking.status,
-});
+const NAV_ITEMS = [
+  { id: 'overview', label: 'Overview', icon: Settings },
+  { id: 'verifications', label: 'Teacher Verifications', icon: UserCheck },
+  { id: 'payments', label: 'Payment Verification', icon: CreditCard },
+  { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
+  { id: 'teachers', label: 'Teachers', icon: GraduationCap },
+  { id: 'students', label: 'Students', icon: Users },
+  { id: 'classes', label: 'Classes', icon: CalendarDays },
+  { id: 'bank-details', label: 'Bank Details', icon: Building2 },
+] as const;
+
+const Panel: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children,
+}) => (
+  <section className="rounded-3xl bg-white p-6 shadow-sm">
+    <div className="mb-4">
+      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+      {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+const StatCard: React.FC<{ label: string; value: string | number; hint?: string }> = ({ label, value, hint }) => (
+  <div className="rounded-3xl bg-white p-5 shadow-sm">
+    <p className="text-sm text-slate-500">{label}</p>
+    <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>
+    {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
+  </div>
+);
+
+const gradeLevels = [
+  'Grade 1-5 (Primary)',
+  'Grade 6-8 (Middle)',
+  'Grade 9-10 (Secondary)',
+  'O-Level',
+  'A-Level',
+  'University/College',
+  'Adult Learning',
+];
 
 const AdminDashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const { formatCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isAddingSubject, setIsAddingSubject] = useState(false);
-  
-  // Data states
-  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
-  const [pendingAdminBookings, setPendingAdminBookings] = useState<any[]>([]);
-  const [pendingVerifications, setPendingVerifications] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any>({ all: [], upcoming: [], completed: [], pending: [] });
-  const [settings, setSettings] = useState<any>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Form states for new subject
-  const [newSubjectName, setNewSubjectName] = useState('');
-  const [newSubjectDescription, setNewSubjectDescription] = useState('');
-  const [newSubjectPrices, setNewSubjectPrices] = useState<Record<string, number>>({});
-  
-  // Grade levels for pricing
-  const gradeLevels = [
-    'Grade 1-5 (Primary)',
-    'Grade 6-8 (Middle)',
-    'Grade 9-10 (Secondary)',
-    'O-Level',
-    'A-Level',
-    'University/College',
-    'Adult Learning'
-  ];
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<{ all: Booking[]; upcoming: Booking[]; completed: Booking[]; pending: Booking[] }>({
+    all: [],
+    upcoming: [],
+    completed: [],
+    pending: [],
+  });
+  const [pendingVerifications, setPendingVerifications] = useState<Teacher[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<Booking[]>([]);
+  const [paymentNotes, setPaymentNotes] = useState<Record<string, string>>({});
+  const [verificationNotes, setVerificationNotes] = useState<Record<string, string>>({});
+  const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [subjectForm, setSubjectForm] = useState({
+    name: '',
+    description: '',
+    prices: {} as Record<string, number>,
+  });
 
-  // Fetch data on mount and when tab changes
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const [
+        statsData,
+        subjectsData,
+        teachersData,
+        studentsData,
+        classesData,
+        verificationsData,
+        pendingAdminData,
+      ] = await Promise.all([
+        adminAPI.getStats(),
+        subjectsAPI.getAllAdmin(),
+        adminAPI.getAllTeachers(),
+        adminAPI.getAllStudents(),
+        adminAPI.getClasses(),
+        adminAPI.getPendingVerifications(),
+        bookingsAPI.getPendingAdmin(),
+      ]);
+
+      setStats(statsData);
+      setSubjects(subjectsData);
+      setTeachers(teachersData);
+      setStudents(studentsData);
+      setClasses(classesData);
+      setPendingVerifications(verificationsData);
+      setPendingPayments(pendingAdminData.filter((booking) => !!booking.paymentProof?.id || !!booking.receiptUrl));
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Failed to load admin dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
-  }, [activeTab]);
+    loadDashboard();
+  }, []);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    // Fetch stats
-    try {
-      const stats = await adminAPI.getStats();
-      setStats(stats.data || stats);
-    } catch (statsErr) {
-      console.warn('Stats API failed:', statsErr);
-      setStats({
-        totalTeachers: 0,
-        totalStudents: 0,
-        activeSubjects: 0,
-        totalRevenue: 0,
-        pendingVerifications: 0,
-        pendingPayments: 0,
-        totalBookings: 0,
-        completedClasses: 0
-      });
+  const subjectToEdit = useMemo(() => {
+    if (!selectedSubject) {
+      return null;
     }
 
-    // Fetch teachers
+    const prices = selectedSubject.pricingTiers.reduce<Record<string, number>>((accumulator, tier) => {
+      accumulator[tier.gradeLevel] = tier.pricePerHour;
+      return accumulator;
+    }, {});
+
+    return {
+      ...selectedSubject,
+      prices,
+    };
+  }, [selectedSubject]);
+
+  const handleTeacherVerification = async (teacherId: string, status: 'approved' | 'rejected') => {
     try {
-      const teachersData = await adminAPI.getAllTeachers();
-      const allTeachers = teachersData.data || teachersData || [];
-      setTeachers(allTeachers);
-      setPendingVerifications(allTeachers.filter((t: any) => 
-        (t.verificationStatus || t.verification_status) === 'pending'
-      ));
-    } catch (err) {
-      console.error('Failed to fetch teachers:', err);
-    }
-
-    // Fetch students
-    try {
-      const studentsData = await adminAPI.getAllStudents();
-      setStudents(studentsData.data || studentsData || []);
-    } catch (err) {
-      console.error('Failed to fetch students:', err);
-    }
-
-    // Fetch classes
-    try {
-      const classesData = await adminAPI.getClasses();
-      setClasses(classesData.data || classesData);
-    } catch (err) {
-      console.error('Failed to fetch classes:', err);
-    }
-
-    // Fetch settings
-    try {
-      const settingsData = await adminAPI.getSettings();
-      setSettings(settingsData.data || settingsData);
-    } catch (err) {
-      console.error('Failed to fetch settings:', err);
-    }
-
-    // Fetch subjects - THIS IS THE KEY FETCH
-    try {
-      const subjectsData = await subjectsAPI.getAllAdmin();
-      const subjectsList = subjectsData.data || subjectsData.subjects || [];
-      setSubjects(subjectsList);
-      console.log('Subjects loaded:', subjectsList.length);
-    } catch (err: any) {
-      console.error('Failed to fetch subjects:', err);
-      setSubjects([]);
-      setError('Failed to load subjects: ' + (err.message || 'Please try again'));
-    }
-
-    // Fetch users
-    try {
-      const usersData = await adminAPI.getAllUsers();
-      setUsers(usersData.data || usersData.users || []);
-    } catch (err) {
-      console.error('Failed to fetch users:', err);
-    }
-
-    // Fetch pending payments
-    try {
-      const paymentsData = await paymentsAPI.getPending();
-      setPendingPayments(paymentsData.data || paymentsData.payments || []);
-    } catch (err) {
-      console.error('Failed to fetch payments:', err);
-    }
-
-    // Fetch pending admin bookings (status = pending_admin)
-    try {
-      const pendingAdminData = await bookingsAPI.getPendingAdmin();
-      const rawBookings = pendingAdminData.data || pendingAdminData.bookings || [];
-      setPendingAdminBookings(rawBookings.map(normalizeBooking));
-    } catch (err) {
-      console.error('Failed to fetch pending admin bookings:', err);
-    }
-    
-    setIsLoading(false);
-  };
-
-  // ✅ FIX: Removed this line - now using state from API
-  // const pendingVerifications = teachers.filter(t => t.verificationStatus === 'pending');
-
-  const sidebarItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'subjects', label: 'Subjects & Pricing', icon: BookOpen },
-    { id: 'teachers', label: 'Teachers', icon: UserCheck },
-    { id: 'students', label: 'Students', icon: User },
-    { id: 'verifications', label: 'Verifications', icon: UserCheck },
-    { id: 'payments', label: 'Payments', icon: CreditCard },
-    { id: 'bank-details', label: 'Bank Details', icon: Building2 },
-    { id: 'classes', label: 'Classes', icon: Calendar },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
-
-  const handleVerifyTeacher = async (teacherId: string, status: string) => {
-    try {
-      await teachersAPI.verify(teacherId, status);
-      alert(`Teacher ${status} successfully!`);
-      fetchData();
-    } catch (err: any) {
-      alert('Failed to verify teacher: ' + err.message);
+      setSaving(true);
+      await teachersAPI.verify(teacherId, status, verificationNotes[teacherId]);
+      toast.success(status === 'approved' ? 'Teacher approved' : 'Teacher rejected');
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update teacher verification');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleApproveTeacher = async (teacherId: string) => {
-    try {
-      await teachersAPI.verify(teacherId, 'approved');
-      alert(`Teacher approved successfully!`);
-      setSelectedTeacher(null);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to approve teacher: ' + err.message);
-    }
-  };
+  const handlePaymentDecision = async (booking: Booking, status: 'approved' | 'rejected') => {
+    const paymentProofId = booking.paymentProof?.id;
 
-  const handleRejectTeacher = async (teacherId: string) => {
-    try {
-      await teachersAPI.verify(teacherId, 'rejected');
-      alert(`Teacher rejected!`);
-      setSelectedTeacher(null);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to reject teacher: ' + err.message);
+    if (!paymentProofId) {
+      toast.error('Receipt data is missing for this booking');
+      return;
     }
-  };
 
-  const handleApprovePayment = async (paymentId: string) => {
     try {
-      await paymentsAPI.verify(paymentId, 'verified');
-      alert(`Payment approved!`);
-      setSelectedBooking(null);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to approve payment: ' + err.message);
-    }
-  };
-
-  const handleVerifyBookingPayment = async (bookingId: string) => {
-    try {
-      await bookingsAPI.verifyPayment(bookingId);
-      alert(`Booking payment verified! The teacher can now add meeting link.`);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to verify payment: ' + err.message);
-    }
-  };
-
-  const handleRejectBookingPayment = async (bookingId: string) => {
-    if (!confirm('Are you sure you want to reject this payment?')) return;
-    try {
-      await bookingsAPI.updateStatus(bookingId, 'rejected');
-      alert(`Payment rejected!`);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to reject payment: ' + err.message);
-    }
-  };
-
-  const handleUpdateSettings = async (newSettings: any) => {
-    try {
-      await adminAPI.updateSettings(newSettings);
-      setSettings({ ...settings, ...newSettings });
-      alert('Settings updated successfully!');
-    } catch (err: any) {
-      alert('Failed to update settings: ' + err.message);
-    }
-  };
-
-  const handleRejectPayment = async (paymentId: string) => {
-    try {
-      await paymentsAPI.verify(paymentId, 'rejected');
-      alert(`Payment rejected!`);
-      setSelectedBooking(null);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to reject payment: ' + err.message);
+      setSaving(true);
+      await paymentsAPI.verify(paymentProofId, status, paymentNotes[booking.id]);
+      toast.success(status === 'approved' ? 'Payment approved and sent to teacher' : 'Payment rejected');
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to review payment');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleAddSubject = async () => {
-    try {
-      const pricingTiers = Object.entries(newSubjectPrices).map(([gradeLevel, price]) => ({
-        gradeLevel,
-        pricePerHour: price
-      }));
-
-      await subjectsAPI.create({
-        name: newSubjectName,
-        description: newSubjectDescription,
-        pricingTiers
-      });
-
-      alert(`Subject "${newSubjectName}" added successfully!`);
-      setIsAddingSubject(false);
-      setNewSubjectName('');
-      setNewSubjectDescription('');
-      setNewSubjectPrices({});
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to add subject: ' + err.message);
+    if (!subjectForm.name.trim()) {
+      toast.error('Subject name is required');
+      return;
     }
-  };
 
-  const handleDeleteSubject = async (subjectId: string) => {
-    if (confirm('Are you sure you want to delete this subject?')) {
-      try {
-        await subjectsAPI.delete(subjectId);
-        alert(`Subject deleted!`);
-        fetchData(); // Refresh data
-      } catch (err: any) {
-        alert('Failed to delete subject: ' + err.message);
-      }
+    if (!gradeLevels.some((grade) => Number(subjectForm.prices[grade]) > 0)) {
+      toast.error('Add at least one pricing tier before creating the subject');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await subjectsAPI.create({
+        name: subjectForm.name,
+        description: subjectForm.description,
+        pricingTiers: gradeLevels
+          .filter((grade) => Number(subjectForm.prices[grade]) > 0)
+          .map((grade) => ({
+            gradeLevel: grade,
+            pricePerHour: Number(subjectForm.prices[grade]),
+          })),
+      });
+      toast.success('Subject created successfully');
+      setIsAddingSubject(false);
+      setSubjectForm({ name: '', description: '', prices: {} });
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create subject');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleUpdatePricing = async () => {
-    if (!selectedSubject) return;
-    
+    if (!selectedSubject) {
+      return;
+    }
+
     try {
-      await subjectsAPI.updatePricing(selectedSubject.id, selectedSubject.pricingTiers);
-      alert('Pricing updated successfully!');
+      setSaving(true);
+      await subjectsAPI.updatePricing(
+        selectedSubject.id,
+        gradeLevels
+          .filter((grade) => Number(subjectForm.prices[grade]) > 0)
+          .map((grade) => ({
+            id: '',
+            subjectId: selectedSubject.id,
+            gradeLevel: grade,
+            pricePerHour: Number(subjectForm.prices[grade]),
+          })),
+      );
+      toast.success('Pricing updated successfully');
       setSelectedSubject(null);
-      fetchData(); // Refresh data
-    } catch (err: any) {
-      alert('Failed to update pricing: ' + err.message);
+      setSubjectForm({ name: '', description: '', prices: {} });
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update pricing');
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (isLoading) {
+  const handleDeactivateSubject = async (subjectId: string) => {
+    try {
+      setSaving(true);
+      await subjectsAPI.delete(subjectId);
+      toast.success('Subject deactivated');
+      await loadDashboard();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to deactivate subject');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !user) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-10 h-10 animate-spin text-[#f5a623]" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-[#f5a623]" />
       </div>
     );
   }
 
   const renderOverview = () => (
-    <div className="space-y-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Teachers</p>
-              <p className="stat-value">{stats?.totalTeachers || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-              <Users className="w-7 h-7 text-[#f5a623]" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Students</p>
-              <p className="stat-value">{stats?.totalStudents || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-              <Users className="w-7 h-7 text-blue-500" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Active Subjects</p>
-              <p className="stat-value text-purple-600">{stats?.activeSubjects || subjects.length}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center">
-              <BookOpen className="w-7 h-7 text-purple-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Revenue</p>
-              <p className="stat-value text-green-6us">{formatCurrency(stats?.totalRevenue || 0)}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-              <DollarSign className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Pending Verifications</p>
-              <p className="stat-value text-orange-500">{stats?.pendingVerifications || pendingVerifications.length}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center">
-              <UserCheck className="w-7 h-7 text-orange-500" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Pending Payments</p>
-              <p className="stat-value text-yellow-600">{stats?.pendingPayments || pendingPayments.length}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-yellow-100 flex items-center justify-center">
-              <CreditCard className="w-7 h-7 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Total Bookings</p>
-              <p className="stat-value">{stats?.totalBookings || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center">
-              <Calendar className="w-7 h-7 text-indigo-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="stat-label">Completed Classes</p>
-              <p className="stat-value text-teal-600">{stats?.completedClasses || 0}</p>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-teal-100 flex items-center justify-center">
-              <CheckCircle className="w-7 h-7 text-teal-600" />
-            </div>
-          </div>
-        </div>
+    <>
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard label="Teachers" value={stats?.totalTeachers || 0} hint="All teacher accounts" />
+        <StatCard label="Students" value={stats?.totalStudents || 0} hint="Registered students" />
+        <StatCard label="Pending Verifications" value={pendingVerifications.length} hint="Teacher applications waiting on admin" />
+        <StatCard label="Revenue" value={formatCurrency(stats?.totalRevenue || 0)} hint="Accepted and completed paid classes" />
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#4a4a4a] mb-4 font-['Poppins']">Recent Activity</h3>
-        <div className="space-y-4">
-          {pendingVerifications.slice(0, 2).map((teacher) => (
-            <div key={teacher.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <img src={teacher.profilePicture || teacher.profile_picture} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
-                <div>
-                  <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
-                  <p className="text-sm text-gray-500">Applied for verification</p>
-                </div>
+      <Panel title="Action Queues" description="The important operational queues are summarized here.">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-blue-100 p-3 text-blue-700">
+                <UserCheck className="h-5 w-5" />
               </div>
-              <button 
-                onClick={() => setSelectedTeacher(teacher)}
-                className="text-[#f5a623] hover:underline text-sm"
-              >
-                Review
-              </button>
-            </div>
-          ))}
-          {pendingPayments.slice(0, 2).map((payment: any) => (
-            <div key={payment.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-[#4a4a4a]">Payment #{payment.id}</p>
-                  <p className="text-sm text-gray-500">${payment.amount} - Pending verification</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedBooking(payment)}
-                className="text-[#f5a623] hover:underline text-sm"
-              >
-                Review
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSubjects = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Subjects & Pricing</h3>
-          <p className="text-sm text-gray-500">Manage subjects and set prices for each grade level</p>
-        </div>
-        <button 
-          onClick={() => setIsAddingSubject(true)}
-          className="btn-primary flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Subject</span>
-        </button>
-      </div>
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          <p>{error}</p>
-          <button 
-            onClick={fetchData}
-            className="mt-2 text-sm text-red-600 hover:underline"
-          >
-            Click to retry
-          </button>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-[#f5a623]" />
-          <span className="ml-3 text-gray-500">Loading subjects...</span>
-        </div>
-      ) : subjects.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <BookOpen className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-          <h4 className="text-lg font-medium text-gray-500">No subjects found</h4>
-          <p className="text-sm text-gray-400 mb-4">Add your first subject to get started</p>
-          <button 
-            onClick={() => setIsAddingSubject(true)}
-            className="btn-primary"
-          >
-            Add Subject
-          </button>
-        </div>
-      ) : (
-      /* Subjects Grid */
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {subjects.map((subject) => (
-          <div key={subject.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="relative h-40">
-              <img src={subject.image} alt={subject.name} className="w-full h-full object-cover" />
-              <div className="absolute top-4 right-4">
-                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  subject.isActive ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'
-                }`}>
-                  {subject.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-            </div>
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-lg font-bold text-[#4a4a4a]">{subject.name}</h4>
-                <div className="flex items-center space-x-1 text-sm text-gray-500">
-                  <Users className="w-4 h-4" />
-                  <span>{subject.tutorCount}</span>
-                </div>
-              </div>
-              <p className="text-sm text-gray-500 mb-4 line-clamp-2">{subject.description}</p>
-              
-              {/* Pricing Preview */}
-              <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <p className="text-xs font-medium text-gray-500 mb-2">PRICING TIERS</p>
-                <div className="space-y-1">
-                  {subject.pricingTiers && subject.pricingTiers.length > 0 ? (
-                    subject.pricingTiers.slice(0, 3).map((tier) => (
-                      <div key={tier?.id || Math.random()} className="flex justify-between text-sm">
-                        <span className="text-gray-600">{tier?.gradeLevel || 'Standard'}</span>
-                        <span className="font-medium text-[#f5a623]">{formatCurrency(tier?.pricePerHour || 0).replace(settings?.currency_symbol || 'د.إ', '')} {settings?.currency_symbol || 'د.إ'}/hr</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-400">No pricing set</p>
-                  )}
-                  {(subject.pricingTiers?.length || 0) > 3 && (
-                    <p className="text-xs text-gray-400">+{(subject.pricingTiers?.length || 0) - 3} more tiers</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex space-x-2">
-                <button 
-                  onClick={() => setSelectedSubject(subject)}
-                  className="flex-1 btn-secondary text-sm py-2 flex items-center justify-center space-x-1"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  <span>Edit Pricing</span>
-                </button>
-                <button 
-                  onClick={() => handleDeleteSubject(subject.id)}
-                  className="px-3 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              <div>
+                <h3 className="font-semibold text-slate-950">Teacher verifications</h3>
+                <p className="text-sm text-slate-500">{pendingVerifications.length} teacher(s) waiting</p>
               </div>
             </div>
           </div>
-        ))}
-      </div>
-      )}
-    </div>
+
+          <div className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+                <CreditCard className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-950">Payment verification</h3>
+                <p className="text-sm text-slate-500">{pendingPayments.length} booking(s) waiting</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
+    </>
   );
 
   const renderVerifications = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Teacher Verifications</h3>
-        <div className="flex items-center space-x-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search teachers..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-[#f5a623]"
-            />
+    <Panel title="Teacher Verifications" description="Approve teachers to make them visible for live bookings.">
+      <div className="space-y-4">
+        {pendingVerifications.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+            No pending teacher applications.
           </div>
-          <button className="p-2 border rounded-lg hover:bg-gray-50" title="Filter Teachers">
-            <Filter className="w-4 h-4 text-gray-600" />
-            <span className="sr-only">Filter</span>
-          </button>
-        </div>
-      </div>
+        ) : pendingVerifications.map((teacher) => (
+          <article key={teacher.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                <img
+                  src={teacher.profilePicture || '/default-avatar.png'}
+                  alt={teacher.name}
+                  className="h-20 w-20 rounded-3xl object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-semibold text-slate-950">{teacher.name}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{teacher.email}</p>
+                  <p className="mt-3 text-sm text-slate-600">{teacher.bio || 'No teacher bio provided.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {teacher.subjects.map((subject) => (
+                      <span key={subject.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                        {subject.name || 'Subject'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>Teacher</th>
-              <th>Subjects</th>
-              <th>Status</th>
-              <th>Applied On</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pendingVerifications.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-500">
-                  No pending teacher verifications found
-                </td>
-              </tr>
-            ) : (
-              pendingVerifications
-                .filter(t => (t.name || t.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-                .map((teacher) => (
-                <tr key={teacher.id}>
-                  <td>
-                    <div className="flex items-center space-x-3">
-                      <img src={teacher.profilePicture || teacher.profile_picture} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
-                      <div>
-                        <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
-                        <p className="text-sm text-gray-500">{teacher.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    {(teacher.subjects || []).map((item: any) => {
-                      const subId = typeof item === 'object' && item !== null ? item.id : item;
-                      const sub = subjects.find(s => s.id === subId);
-                      return sub?.name;
-                    }).filter(Boolean).join(', ') || '-'}
-                  </td>
-                  <td>
-                    <span className={`badge ${
-                      teacher.verification_status === 'approved' ? 'badge-approved' :
-                      teacher.verification_status === 'pending' ? 'badge-pending' : 'badge-rejected'
-                    }`}>
-                      {teacher.verification_status}
-                    </span>
-                  </td>
-                  <td>{new Date(teacher.createdAt || teacher.submitted_at || teacher.created_at).toLocaleDateString()}</td>
-                  <td>
-                    <div className="flex items-center space-x-2">
-                      {teacher.verification_status === 'pending' && (
-                        <>
-                          <button 
-                            onClick={() => handleVerifyTeacher(teacher.id, 'approved')}
-                            className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                          >
-                            Approve
-                          </button>
-                          <button 
-                            onClick={() => handleVerifyTeacher(teacher.id, 'rejected')}
-                            className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      <button 
-                        onClick={() => setSelectedTeacher(teacher)}
-                        className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>View</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              <textarea
+                rows={3}
+                placeholder="Optional note for approval or rejection"
+                value={verificationNotes[teacher.id] || ''}
+                onChange={(event) => setVerificationNotes((current) => ({
+                  ...current,
+                  [teacher.id]: event.target.value,
+                }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+              />
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleTeacherVerification(teacher.id, 'approved')}
+                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                >
+                  Approve teacher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTeacherVerification(teacher.id, 'rejected')}
+                  className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Reject teacher
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-    </div>
+    </Panel>
   );
 
   const renderPayments = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Payment Verifications</h3>
-      
-      {/* Pending Admin Bookings Section */}
-      {pendingAdminBookings.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h4 className="font-semibold text-[#4a4a4a] mb-4 flex items-center">
-            <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
-            Pending Admin Verification ({pendingAdminBookings.length})
-          </h4>
-          <div className="space-y-4">
-            {pendingAdminBookings.map((booking: any) => (
-              <div key={booking.id} className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <div>
-                  <p className="font-medium text-[#4a4a4a]">
-                    {booking.subject_name || booking.subjectName} - Class #{booking.id}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Student: {booking.student_name || booking.studentName || 'Unknown'}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Teacher: {booking.teacher_name || booking.teacherName || 'Unknown'}
-                  </p>
-                  <p className="text-sm font-medium text-[#f5a623]">
-                    Amount: AED {booking.total_amount || booking.totalAmount}
-                  </p>
-                  {booking.receipt_url && (
-                    <a href={booking.receipt_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                      View Payment Receipt
-                    </a>
-                  )}
-                </div>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handleVerifyBookingPayment(booking.id)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 flex items-center space-x-1"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Verify</span>
-                  </button>
-                  <button 
-                    onClick={() => handleRejectBookingPayment(booking.id)}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 flex items-center space-x-1"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    <span>Reject</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+    <Panel title="Payment Verification" description="Approve paid class receipts to forward the request to the teacher.">
+      <div className="space-y-4">
+        {pendingPayments.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+            No payment receipts waiting for review.
           </div>
-        </div>
-      )}
-
-      {/* Legacy Payments Section */}
-      {pendingPayments.length > 0 && (
-        <div className="data-table">
-          <h4 className="font-semibold text-[#4a4a4a] mb-4">Legacy Payments</h4>
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th>Payment ID</th>
-                <th>Student</th>
-                <th>Teacher</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingPayments.map((payment: any) => (
-                <tr key={payment.id}>
-                  <td>#{payment.id}</td>
-                  <td>{payment.studentName || 'Unknown'}</td>
-                  <td>{payment.teacherName || 'Unknown'}</td>
-                  <td>
-                    <div>
-                      <p className="font-medium">AED {payment.amount}</p>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`badge badge-pending`}>
-                      {payment.status}
+        ) : pendingPayments.map((booking) => (
+          <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-slate-950">{booking.subjectName}</h3>
+                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                      {booking.isDemo ? 'Demo' : 'Paid class'}
                     </span>
-                  </td>
-                  <td>
-                    <button 
-                      onClick={() => setSelectedBooking(payment)}
-                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span>Review</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">Student: {booking.studentName}</p>
+                  <p className="mt-1 text-sm text-slate-600">Teacher: {booking.teacherName}</p>
+                  <p className="mt-1 text-sm text-slate-600">Amount: {formatCurrency(booking.totalAmount)}</p>
+                  <p className="mt-1 text-sm text-slate-500">Requested time: {new Date(booking.scheduledDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                </div>
 
-      {pendingAdminBookings.length === 0 && pendingPayments.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          No pending payments to verify
-        </div>
-      )}
-    </div>
+                {(booking.receiptUrl || booking.paymentProof?.fileUrl) ? (
+                  <a
+                    href={booking.receiptUrl || booking.paymentProof?.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]"
+                  >
+                    View receipt
+                  </a>
+                ) : (
+                  <span className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">Receipt missing</span>
+                )}
+              </div>
+
+              <textarea
+                rows={3}
+                placeholder="Optional note for approval or rejection"
+                value={paymentNotes[booking.id] || ''}
+                onChange={(event) => setPaymentNotes((current) => ({
+                  ...current,
+                  [booking.id]: event.target.value,
+                }))}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+              />
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => handlePaymentDecision(booking, 'approved')}
+                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                >
+                  Approve payment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePaymentDecision(booking, 'rejected')}
+                  className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  Reject payment
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
   );
 
-  const renderUsers = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">All Users</h3>
-      
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Role</th>
-              <th>Email</th>
-              <th>Joined On</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-[#f5a623]/10 flex items-center justify-center">
-                      <span className="text-[#f5a623] font-bold">{user.name?.charAt(0)}</span>
-                    </div>
-                    <span className="font-medium text-[#4a4a4a]">{user.name}</span>
-                  </div>
-                </td>
-                <td>
-                  <span className={`badge ${
-                    user.role === 'admin' ? 'badge-approved' :
-                    user.role === 'teacher' ? 'badge-pending' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td>{user.email}</td>
-                <td>{new Date(user.createdAt).toLocaleDateString()}</td>
-                <td>
-                  <span className="badge badge-approved">Active</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  const renderSubjects = () => (
+    <Panel title="Subjects & Pricing" description="Create subjects and maintain grade-based pricing tiers.">
+      <div className="mb-6 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setIsAddingSubject(true);
+            setSelectedSubject(null);
+            setSubjectForm({ name: '', description: '', prices: {} });
+          }}
+          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+        >
+          <Plus className="h-4 w-4" />
+          Add subject
+        </button>
       </div>
-    </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {subjects.map((subject) => (
+          <article key={subject.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-950">{subject.name}</h3>
+                <p className="mt-1 text-sm text-slate-500">{subject.description || 'No description set.'}</p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${subject.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                {subject.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm text-slate-600">
+              {subject.pricingTiers.length === 0 && <p>No pricing tiers configured.</p>}
+              {subject.pricingTiers.map((tier) => (
+                <div key={tier.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span>{tier.gradeLevel}</span>
+                  <span className="font-medium">{formatCurrency(tier.pricePerHour)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubject(subject);
+                  setIsAddingSubject(false);
+                  setSubjectForm({
+                    name: subject.name,
+                    description: subject.description,
+                    prices: subject.pricingTiers.reduce<Record<string, number>>((accumulator, tier) => {
+                      accumulator[tier.gradeLevel] = tier.pricePerHour;
+                      return accumulator;
+                    }, {}),
+                  });
+                }}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]"
+              >
+                Edit pricing
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeactivateSubject(subject.id)}
+                className="rounded-2xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+              >
+                Deactivate
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
   );
 
   const renderTeachers = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">All Teachers</h3>
-      
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>Teacher</th>
-              <th>Subjects</th>
-              <th>Status</th>
-              <th>Joined On</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {teachers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-500">
-                  No teachers found
-                </td>
-              </tr>
-            ) : (
-              teachers.map((teacher: any) => (
-                <tr key={teacher.id}>
-                  <td>
-                    <div className="flex items-center space-x-3">
-                      <img src={teacher.profilePicture || teacher.profile_picture || '/default-avatar.png'} alt={teacher.name || teacher.full_name} className="w-10 h-10 rounded-full object-cover" />
-                      <div>
-                        <p className="font-medium text-[#4a4a4a]">{teacher.name || teacher.full_name}</p>
-                        <p className="text-sm text-gray-500">{teacher.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    {(teacher.subjects || []).length > 0 ? `${(teacher.subjects || []).length} subjects` : '-'}
-                  </td>
-                  <td>
-                    <span className={`badge ${
-                      teacher.verification_status === 'approved' ? 'badge-approved' :
-                      teacher.verification_status === 'pending' ? 'badge-pending' : 'badge-rejected'
-                    }`}>
-                      {teacher.verification_status}
-                    </span>
-                  </td>
-                  <td>{new Date(teacher.created_at || teacher.createdAt).toLocaleDateString()}</td>
-                  <td>
-                    <button 
-                      onClick={() => setSelectedTeacher(teacher)}
-                      className="text-[#f5a623] hover:underline text-sm flex items-center space-x-1"
-                    >
-                      <Eye className="w-4 h-4" />
-                      <span>View</span>
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+    <Panel title="Teachers" description="All teacher accounts in the system.">
+      <div className="space-y-4">
+        {teachers.map((teacher) => (
+          <article key={teacher.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <img
+                  src={teacher.profilePicture || '/default-avatar.png'}
+                  alt={teacher.name}
+                  className="h-16 w-16 rounded-2xl object-cover"
+                />
+                <div>
+                  <h3 className="font-semibold text-slate-950">{teacher.name}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{teacher.email}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {teacher.subjects.map((subject) => (
+                      <span key={subject.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                        {subject.name || 'Subject'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${teacher.isLive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {teacher.isLive ? 'Live' : 'Offline'}
+                </span>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${teacher.verificationStatus === 'approved' ? 'bg-green-100 text-green-700' : teacher.verificationStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  {teacher.verificationStatus}
+                </span>
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-    </div>
+    </Panel>
   );
 
   const renderStudents = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">All Students</h3>
-      
-      <div className="data-table">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th>Student</th>
-              <th>Grade Level</th>
-              <th>Location</th>
-              <th>Parent Contact</th>
-              <th>Joined On</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-500">
-                  No students found
-                </td>
-              </tr>
-            ) : (
-              students.map((student: any) => (
-                <tr key={student.id}>
-                  <td>
-                    <div className="flex items-center space-x-3">
-                      <img src={student.profilePicture || student.profile_picture || '/default-avatar.png'} alt={student.name} className="w-10 h-10 rounded-full object-cover" />
-                      <div>
-                        <p className="font-medium text-[#4a4a4a]">{student.name || student.full_name}</p>
-                        <p className="text-sm text-gray-500">{student.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td>{student.grade_level || '-'}</td>
-                  <td>{student.location || '-'}</td>
-                  <td>{student.parent_contact || '-'}</td>
-                  <td>{new Date(student.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+    <Panel title="Students" description="Registered student accounts.">
+      <div className="space-y-4">
+        {students.map((student) => (
+          <article key={student.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <img
+                  src={student.profilePicture || '/default-avatar.png'}
+                  alt={student.name}
+                  className="h-16 w-16 rounded-2xl object-cover"
+                />
+                <div>
+                  <h3 className="font-semibold text-slate-950">{student.name}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{student.email}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Grade: {student.gradeLevel || 'Not set'}
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-    </div>
+    </Panel>
   );
 
   const renderClasses = () => (
-    <div className="space-y-6">
-      <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Class Management</h3>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-600 font-semibold">Upcoming Classes</p>
-              <p className="text-3xl font-bold text-blue-700">{classes.upcoming?.length || 0}</p>
-            </div>
-            <Calendar className="w-10 h-10 text-blue-400" />
-          </div>
-        </div>
-        <div className="bg-green-50 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-600 font-semibold">Completed Classes</p>
-              <p className="text-3xl font-bold text-green-700">{classes.completed?.length || 0}</p>
-            </div>
-            <CheckCircle className="w-10 h-10 text-green-400" />
-          </div>
-        </div>
-        <div className="bg-yellow-50 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-yellow-600 font-semibold">Pending Classes</p>
-              <p className="text-3xl font-bold text-yellow-700">{classes.pending?.length || 0}</p>
-            </div>
-            <CreditCard className="w-10 h-10 text-yellow-400" />
-          </div>
-        </div>
-      </div>
-
+    <Panel title="Classes" description="All class bookings across pending, accepted, and completed states.">
       <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-[#4a4a4a]">Upcoming Classes</h4>
-        {(!classes.upcoming || classes.upcoming.length === 0) ? (
-          <p className="text-gray-500 text-center py-8">No upcoming classes</p>
-        ) : (
-          <div className="data-table">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Teacher</th>
-                  <th>Subject</th>
-                  <th>Date & Time</th>
-                  <th>Duration</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classes.upcoming.map((cls: any) => (
-                  <tr key={cls.id}>
-                    <td>{cls.student_name}</td>
-                    <td>{cls.teacher_name}</td>
-                    <td>{cls.subject_name}</td>
-                    <td>{new Date(cls.scheduled_date).toLocaleString()}</td>
-                    <td>{cls.duration} min</td>
-                    <td>{settings.currency || 'AED'} {cls.total_amount}</td>
-                    <td>
-                      <span className="badge badge-approved">{cls.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {classes.all.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+            No classes found.
           </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-[#4a4a4a]">Completed Classes</h4>
-        {(!classes.completed || classes.completed.length === 0) ? (
-          <p className="text-gray-500 text-center py-8">No completed classes</p>
-        ) : (
-          <div className="data-table">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Teacher</th>
-                  <th>Subject</th>
-                  <th>Date & Time</th>
-                  <th>Duration</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classes.completed.map((cls: any) => (
-                  <tr key={cls.id}>
-                    <td>{cls.student_name}</td>
-                    <td>{cls.teacher_name}</td>
-                    <td>{cls.subject_name}</td>
-                    <td>{new Date(cls.scheduled_date).toLocaleString()}</td>
-                    <td>{cls.duration} min</td>
-                    <td>{settings.currency || 'AED'} {cls.total_amount}</td>
-                    <td>
-                      <span className="badge bg-green-100 text-green-700">{cls.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderSettings = () => {
-    const [localSettings, setLocalSettings] = useState({
-      primary_color: settings.primary_color || '#f5a623',
-      secondary_color: settings.secondary_color || '#4a4a4a',
-      accent_color: settings.accent_color || '#3498db',
-      currency: settings.currency || 'AED',
-      currency_symbol: settings.currency_symbol || 'د.إ',
-      site_name: settings.site_name || 'IkLearnEdge',
-    });
-
-    const handleSave = () => {
-      handleUpdateSettings(localSettings);
-    };
-
-    return (
-      <div className="space-y-6">
-        <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Website Settings</h3>
-        
-        <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
-          <div>
-            <h4 className="font-semibold text-[#4a4a4a] mb-4">Color Theme</h4>
-            <div className="grid md:grid-cols-3 gap-4">
+        ) : classes.all.map((booking) => (
+          <article key={booking.id} className="rounded-3xl border border-slate-200 p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <label className="form-label">Primary Color</label>
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="color" 
-                    value={localSettings.primary_color}
-                    onChange={(e) => setLocalSettings({...localSettings, primary_color: e.target.value})}
-                    className="w-12 h-10 rounded cursor-pointer"
-                  />
-                  <input 
-                    type="text" 
-                    value={localSettings.primary_color}
-                    onChange={(e) => setLocalSettings({...localSettings, primary_color: e.target.value})}
-                    className="form-input flex-1"
-                    placeholder="#f5a623"
-                  />
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-slate-950">{booking.subjectName}</h3>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    booking.status === 'accepted'
+                      ? 'bg-green-100 text-green-700'
+                      : booking.status === 'completed'
+                        ? 'bg-slate-200 text-slate-700'
+                        : booking.status === 'pending_admin' || booking.status === 'pending_teacher'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-red-100 text-red-700'
+                  }`}>
+                    {booking.status.replace('_', ' ')}
+                  </span>
                 </div>
-              </div>
-              <div>
-                <label className="form-label">Secondary Color</label>
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="color" 
-                    value={localSettings.secondary_color}
-                    onChange={(e) => setLocalSettings({...localSettings, secondary_color: e.target.value})}
-                    className="w-12 h-10 rounded cursor-pointer"
-                  />
-                  <input 
-                    type="text" 
-                    value={localSettings.secondary_color}
-                    onChange={(e) => setLocalSettings({...localSettings, secondary_color: e.target.value})}
-                    className="form-input flex-1"
-                    placeholder="#4a4a4a"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">Accent Color</label>
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="color" 
-                    value={localSettings.accent_color}
-                    onChange={(e) => setLocalSettings({...localSettings, accent_color: e.target.value})}
-                    className="w-12 h-10 rounded cursor-pointer"
-                  />
-                  <input 
-                    type="text" 
-                    value={localSettings.accent_color}
-                    onChange={(e) => setLocalSettings({...localSettings, accent_color: e.target.value})}
-                    className="form-input flex-1"
-                    placeholder="#3498db"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-[#4a4a4a] mb-4">Currency Settings</h4>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Currency Code</label>
-                <select 
-                  value={localSettings.currency}
-                  onChange={(e) => setLocalSettings({...localSettings, currency: e.target.value})}
-                  className="form-input"
-                >
-                  <option value="AED">AED - UAE Dirham</option>
-                  <option value="USD">USD - US Dollar</option>
-                  <option value="EUR">EUR - Euro</option>
-                  <option value="GBP">GBP - British Pound</option>
-                  <option value="SAR">SAR - Saudi Riyal</option>
-                  <option value="KWD">KWD - Kuwaiti Dinar</option>
-                  <option value="QAR">QAR - Qatari Riyal</option>
-                  <option value="BHD">BHD - Bahraini Dinar</option>
-                  <option value="OMR">OMR - Omani Rial</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Currency Symbol</label>
-                <input 
-                  type="text" 
-                  value={localSettings.currency_symbol}
-                  onChange={(e) => setLocalSettings({...localSettings, currency_symbol: e.target.value})}
-                  className="form-input"
-                  placeholder="د.إ"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-[#4a4a4a] mb-4">Site Name</h4>
-            <input 
-              type="text" 
-              value={localSettings.site_name}
-              onChange={(e) => setLocalSettings({...localSettings, site_name: e.target.value})}
-              className="form-input max-w-md"
-              placeholder="IkLearnEdge"
-            />
-          </div>
-
-          <div className="pt-4 border-t">
-            <button 
-              onClick={handleSave}
-              className="btn-primary"
-            >
-              Save Settings
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="dashboard-layout">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="p-6">
-          <div className="flex items-center space-x-2 mb-8">
-            <div className="w-10 h-10 rounded-full bg-[#f5a623] flex items-center justify-center">
-              <span className="text-white font-bold text-lg">A</span>
-            </div>
-            <div>
-              <p className="font-semibold text-white">Admin</p>
-              <p className="text-xs text-white/60">admin@iklearnedge.com</p>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`sidebar-nav-item w-full ${activeTab === item.id ? 'active' : ''}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <button 
-            onClick={logout}
-            className="sidebar-nav-item w-full text-red-400 hover:text-red-300"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <h1 className="text-2xl font-bold text-[#4a4a4a] font-['Poppins']">
-            {sidebarItems.find(i => i.id === activeTab)?.label}
-          </h1>
-          <div className="flex items-center space-x-4">
-            <button className="relative p-2 hover:bg-gray-100 rounded-full" title="Notifications">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-              <span className="sr-only">Notifications</span>
-            </button>
-          </div>
-        </header>
-
-        <div className="dashboard-content">
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">
-              {error}
-            </div>
-          )}
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'subjects' && renderSubjects()}
-          {activeTab === 'teachers' && renderTeachers()}
-          {activeTab === 'students' && renderStudents()}
-          {activeTab === 'verifications' && renderVerifications()}
-          {activeTab === 'payments' && renderPayments()}
-          {activeTab === 'users' && renderUsers()}
-          {activeTab === 'bank-details' && <BankDetailsPage />}
-          {activeTab === 'classes' && renderClasses()}
-          {activeTab === 'settings' && renderSettings()}
-        </div>
-      </main>
-
-      {/* Add Subject Modal */}
-      {isAddingSubject && (
-        <div className="modal-overlay" onClick={() => setIsAddingSubject(false)}>
-          <div className="modal-content max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">Add New Subject</h3>
-              <button onClick={() => setIsAddingSubject(false)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Add Subject Modal">
-                <XCircle className="w-5 h-5 text-gray-500" />
-                <span className="sr-only">Close</span>
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="form-label">Subject Name</label>
-                <input 
-                  type="text" 
-                  value={newSubjectName}
-                  onChange={(e) => setNewSubjectName(e.target.value)}
-                  className="form-input"
-                  placeholder="e.g., History"
-                />
-              </div>
-              <div>
-                <label className="form-label">Description</label>
-                <textarea 
-                  value={newSubjectDescription}
-                  onChange={(e) => setNewSubjectDescription(e.target.value)}
-                  className="form-input min-h-[80px]"
-                  placeholder="Brief description of the subject"
-                />
-              </div>
-              <div>
-                <label className="form-label">Set Prices by Grade Level</label>
-                <div className="space-y-3">
-                  {gradeLevels.map((grade: string) => (
-                    <div key={grade} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="text-sm text-gray-600">{grade}</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-gray-500">$</span>
-                        <input 
-                          type="number"
-                          min="5"
-                          placeholder="Enter price"
-                          className="w-20 form-input py-1 text-sm"
-                          aria-label={`Price for ${grade}`}
-                          onChange={(e) => setNewSubjectPrices({...newSubjectPrices, [grade]: Number(e.target.value)})}
-                        />
-                        <span className="text-sm text-gray-500">/hr</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button onClick={handleAddSubject} className="btn-primary w-full" title="Add Subject">
-                Add Subject
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Pricing Modal */}
-      {selectedSubject && (
-        <div className="modal-overlay" onClick={() => setSelectedSubject(null)}>
-          <div className="modal-content max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                Edit Pricing: {selectedSubject.name}
-              </h3>
-              <button onClick={() => setSelectedSubject(null)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Edit Pricing Modal">
-                <XCircle className="w-5 h-5 text-gray-500" />
-                <span className="sr-only">Close</span>
-              </button>
-            </div>
-            <div className="space-y-4">
-              {selectedSubject.pricingTiers?.map((tier: any) => (
-                <div key={tier.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-gray-600">{tier.gradeLevel}</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-gray-500">$</span>
-                    <input 
-                      type="number"
-                      min="5"
-                      defaultValue={tier.pricePerHour}
-                      className="w-20 form-input py-1 text-sm"
-                      aria-label={`Edit price for ${tier.gradeLevel}`}
-                      placeholder="Enter price"
-                    />
-                    <span className="text-sm text-gray-500">/hr</span>
-                  </div>
-                </div>
-              ))}
-              <button onClick={handleUpdatePricing} className="btn-primary w-full" title="Update Pricing">
-                Update Pricing
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Teacher Verification Modal */}
-      {selectedTeacher && (
-        <div className="modal-overlay" onClick={() => setSelectedTeacher(null)}>
-          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                Teacher Verification
-              </h3>
-              <button onClick={() => setSelectedTeacher(null)} className="p-2 hover:bg-gray-100 rounded-full" title="Close Teacher Verification Modal">
-                <XCircle className="w-5 h-5 text-gray-500" />
-                <span className="sr-only">Close</span>
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div className="flex items-center space-x-4">
-                <img 
-                  src={selectedTeacher.profilePicture} 
-                  alt={selectedTeacher.name} 
-                  className="w-20 h-20 rounded-full object-cover"
-                />
-                <div>
-                  <h4 className="text-lg font-bold text-[#4a4a4a]">{selectedTeacher.name}</h4>
-                  <p className="text-gray-500">{selectedTeacher.email}</p>
-                </div>
-              </div>
-
-              <div>
-                <h5 className="font-semibold text-[#4a4a4a] mb-2">Bio</h5>
-                <p className="text-gray-600 text-sm">{selectedTeacher.bio || 'No bio provided'}</p>
-              </div>
-
-              <div>
-                <h5 className="font-semibold text-[#4a4a4a] mb-2">Subjects They Teach</h5>
-                <div className="flex flex-wrap gap-2">
-                  {(selectedTeacher.subjects || []).map((item: any) => {
-                    const subId = typeof item === 'object' && item !== null ? item.id : item;
-                    const sub = subjects.find(s => s.id === subId);
-                    return sub ? (
-                      <span key={subId} className="px-3 py-1 bg-[#f5a623]/10 text-[#f5a623] rounded-full text-sm">
-                        {sub.name}
-                      </span>
-                    ) : null;
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <h5 className="font-semibold text-[#4a4a4a] mb-2 flex items-center space-x-2">
-                    <FileText className="w-4 h-4" />
-                    <span>Highest Degree</span>
-                  </h5>
-                  <p className="text-sm text-gray-600">{(selectedTeacher.highestDegree || {}).fileName || 'Document uploaded'}</p>
-                  <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
-                </div>
-
-                <div className="p-4 border rounded-lg">
-                  <h5 className="font-semibold text-[#4a4a4a] mb-2 flex items-center space-x-2">
-                    <FileText className="w-4 h-4" />
-                    <span>ID Document</span>
-                  </h5>
-                  <p className="text-sm text-gray-600">{(selectedTeacher.identityDocument || {}).fileName || 'Document uploaded'}</p>
-                  <button className="text-[#f5a623] text-sm hover:underline mt-2">View Document</button>
-                </div>
-              </div>
-
-              {(selectedTeacher.verificationStatus === 'pending') && (
-                <div className="flex space-x-4">
-                  <button 
-                    onClick={() => handleApproveTeacher(selectedTeacher.id)}
-                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    <span>Approve</span>
-                  </button>
-                  <button 
-                    onClick={() => handleRejectTeacher(selectedTeacher.id)}
-                    className="flex-1 btn-secondary flex items-center justify-center space-x-2 text-red-600 border-red-300 hover:bg-red-50"
-                  >
-                    <XCircle className="w-5 h-5" />
-                    <span>Reject</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Review Modal */}
-      {selectedBooking && (
-        <div className="modal-overlay" onClick={() => setSelectedBooking(null)}>
-          <div className="modal-content max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#4a4a4a] font-['Poppins']">
-                Payment Verification
-              </h3>
-              <button onClick={() => setSelectedBooking(null)} className="p-2 hover:bg-gray-100 rounded-full">
-                <XCircle className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div className="text-center p-6 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500 mb-2">Total Amount</p>
-                <p className="text-4xl font-bold text-[#f5a623] font-['Poppins']">
-                  ${selectedBooking.amount}
+                <p className="mt-1 text-sm text-slate-600">
+                  {booking.studentName} with {booking.teacherName}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {new Date(booking.scheduledDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                 </p>
               </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                {formatCurrency(booking.totalAmount)}
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
 
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Payment ID</span>
-                  <span className="font-medium">#{selectedBooking.id}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Student</span>
-                  <span className="font-medium">{selectedBooking.studentName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Teacher</span>
-                  <span className="font-medium">{selectedBooking.teacherName}</span>
-                </div>
+  return (
+    <>
+      <DashboardLayout
+        title={NAV_ITEMS.find((item) => item.id === activeTab)?.label || 'Admin Dashboard'}
+        subtitle="Keep payments, teachers, subjects, and bookings aligned across the whole system."
+        userName={user.name}
+        roleLabel="Admin"
+        avatarUrl={user.profilePicture}
+        navItems={[...NAV_ITEMS]}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={logout}
+      >
+        {activeTab === 'overview' && renderOverview()}
+        {activeTab === 'verifications' && renderVerifications()}
+        {activeTab === 'payments' && renderPayments()}
+        {activeTab === 'subjects' && renderSubjects()}
+        {activeTab === 'teachers' && renderTeachers()}
+        {activeTab === 'students' && renderStudents()}
+        {activeTab === 'classes' && renderClasses()}
+        {activeTab === 'bank-details' && <BankDetailsPage />}
+      </DashboardLayout>
+
+      {(isAddingSubject || selectedSubject) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-[#d99018]">{selectedSubject ? 'Edit pricing' : 'Add subject'}</p>
+                <h3 className="mt-1 text-2xl font-semibold text-slate-950">
+                  {selectedSubject ? selectedSubject.name : 'Create a new subject'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingSubject(false);
+                  setSelectedSubject(null);
+                  setSubjectForm({ name: '', description: '', prices: {} });
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-400"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              {!selectedSubject && (
+                <>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Subject name</span>
+                    <input
+                      type="text"
+                      value={subjectForm.name}
+                      onChange={(event) => setSubjectForm((current) => ({ ...current, name: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-700">Description</span>
+                    <textarea
+                      rows={4}
+                      value={subjectForm.description}
+                      onChange={(event) => setSubjectForm((current) => ({ ...current, description: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                    />
+                  </label>
+                </>
+              )}
+
+              <div className="grid gap-3">
+                {gradeLevels.map((grade) => (
+                  <label key={grade} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3">
+                    <span className="text-sm text-slate-700">{grade}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={subjectForm.prices[grade] || ''}
+                      onChange={(event) => setSubjectForm((current) => ({
+                        ...current,
+                        prices: {
+                          ...current.prices,
+                          [grade]: Number(event.target.value),
+                        },
+                      }))}
+                      className="w-32 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none transition focus:border-[#f5a623] focus:bg-white"
+                      placeholder="0"
+                    />
+                  </label>
+                ))}
               </div>
 
-              <div className="p-4 border rounded-lg">
-                <h5 className="font-semibold text-[#4a4a4a] mb-2">Payment Proof</h5>
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-12 h-12 text-gray-400" />
-                </div>
-                <button className="text-[#f5a623] text-sm hover:underline mt-2">View Full Image</button>
-              </div>
-
-              <div className="flex space-x-4">
-                <button 
-                  onClick={() => handleApprovePayment(selectedBooking.id)}
-                  className="flex-1 btn-primary flex items-center justify-center space-x-2"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  <span>Approve Payment</span>
-                </button>
-                <button 
-                  onClick={() => handleRejectPayment(selectedBooking.id)}
-                  className="flex-1 btn-secondary flex items-center justify-center space-x-2 text-red-600 border-red-300 hover:bg-red-50"
-                >
-                  <XCircle className="w-5 h-5" />
-                  <span>Reject</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={selectedSubject ? handleUpdatePricing : handleAddSubject}
+                className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-[#f5a623] hover:text-slate-950"
+                disabled={saving}
+              >
+                {selectedSubject ? 'Save pricing' : 'Create subject'}
+              </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

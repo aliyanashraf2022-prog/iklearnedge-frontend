@@ -1,5 +1,14 @@
-// User Types
 export type UserRole = 'admin' | 'teacher' | 'student';
+
+export type BookingStatus =
+  | 'pending_admin'
+  | 'pending_teacher'
+  | 'accepted'
+  | 'rejected'
+  | 'cancelled'
+  | 'completed';
+
+export type PaymentStatus = 'pending' | 'approved' | 'rejected';
 
 export interface User {
   id: string;
@@ -7,20 +16,8 @@ export interface User {
   name: string;
   role: UserRole;
   profilePicture?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Subject Types - Admin Controlled
-export interface Subject {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  tutorCount: number;
-  isActive: boolean;
-  // Admin-controlled pricing by grade level
-  pricingTiers: PricingTier[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PricingTier {
@@ -31,7 +28,16 @@ export interface PricingTier {
   description?: string;
 }
 
-// Grade Levels
+export interface Subject {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  tutorCount: number;
+  isActive: boolean;
+  pricingTiers: PricingTier[];
+}
+
 export const GRADE_LEVELS = [
   'Grade 1-5 (Primary)',
   'Grade 6-8 (Middle)',
@@ -39,45 +45,10 @@ export const GRADE_LEVELS = [
   'O-Level',
   'A-Level',
   'University/College',
-  'Adult Learning'
+  'Adult Learning',
 ] as const;
 
 export type GradeLevel = typeof GRADE_LEVELS[number];
-
-// Teacher Types
-export interface Teacher {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  bio: string;
-  subjects: string[]; // Subject IDs they teach
-  // Teachers no longer set their own price - admin controls pricing
-  profilePicture: string;
-  highestDegree: {
-    fileName: string;
-    fileUrl: string;
-    uploadedAt: Date;
-  };
-  teachingCertificates: {
-    fileName: string;
-    fileUrl: string;
-    uploadedAt: Date;
-  }[];
-  identityDocument: {
-    type: 'cnic' | 'passport';
-    fileName: string;
-    fileUrl: string;
-    uploadedAt: Date;
-  };
-  verificationStatus: 'pending' | 'approved' | 'rejected';
-  verificationNotes?: string;
-  isLive: boolean;
-  availability: AvailabilitySlot[];
-  meetingLink?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 export interface AvailabilitySlot {
   id: string;
@@ -87,7 +58,42 @@ export interface AvailabilitySlot {
   isAvailable: boolean;
 }
 
-// Student Types
+export interface TeacherDocument {
+  id: string;
+  type: 'degree' | 'certificate' | 'identity' | string;
+  fileName: string;
+  fileUrl: string;
+  uploadedAt: string;
+}
+
+export interface TeacherSubject {
+  id: string;
+  name: string;
+}
+
+export interface Teacher {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  bio: string;
+  subjects: TeacherSubject[];
+  profilePicture: string;
+  qualifications?: string;
+  yearsOfExperience?: number;
+  highestDegree?: TeacherDocument | null;
+  teachingCertificates?: TeacherDocument[];
+  identityDocument?: TeacherDocument | null;
+  documents?: TeacherDocument[];
+  verificationStatus: 'pending' | 'approved' | 'rejected';
+  verificationNotes?: string;
+  isLive: boolean;
+  availability: AvailabilitySlot[];
+  meetingLink?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Student {
   id: string;
   userId: string;
@@ -96,29 +102,9 @@ export interface Student {
   gradeLevel: string;
   profilePicture: string;
   parentContact?: string;
-  location: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Booking Types
-export interface Booking {
-  id: string;
-  studentId: string;
-  teacherId: string;
-  subjectId: string;
-  subjectName: string;
-  gradeLevel: string;
-  status: 'pending_payment' | 'payment_under_review' | 'confirmed' | 'completed' | 'cancelled';
-  scheduledDate: Date;
-  duration: number; // in minutes
-  pricePerHour: number;
-  totalAmount: number;
-  paymentProof?: PaymentProof;
-  meetingLink?: string;
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  location?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PaymentProof {
@@ -126,39 +112,53 @@ export interface PaymentProof {
   bookingId: string;
   fileName: string;
   fileUrl: string;
-  uploadedAt: Date;
-  status: 'pending' | 'approved' | 'rejected';
-  reviewedAt?: Date;
+  uploadedAt: string;
+  status: PaymentStatus;
+  reviewedAt?: string;
   reviewNotes?: string;
+  totalAmount?: number;
+  bookingStatus?: string;
+  subjectId?: string;
+  subjectName?: string;
+  studentName?: string;
+  teacherName?: string;
 }
 
-// Class Session Types
-export interface ClassSession {
+export interface Booking {
   id: string;
-  bookingId: string;
-  teacherId: string;
   studentId: string;
-  scheduledAt: Date;
+  teacherId: string;
+  subjectId: string;
+  subjectName: string;
+  studentName?: string;
+  studentEmail?: string;
+  teacherName?: string;
+  teacherEmail?: string;
+  gradeLevel: string;
+  status: BookingStatus;
+  scheduledDate: string;
   duration: number;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-  meetingLink: string;
-  recordingUrl?: string;
+  pricePerHour: number;
+  totalAmount: number;
+  paymentProof?: PaymentProof;
+  meetingLink?: string;
   notes?: string;
-  createdAt: Date;
+  isDemo: boolean;
+  receiptUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-// Notification Types
 export interface Notification {
   id: string;
   userId: string;
   title: string;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: string;
   isRead: boolean;
-  createdAt: Date;
+  createdAt: string;
 }
 
-// Dashboard Stats
 export interface AdminStats {
   totalTeachers: number;
   pendingVerifications: number;
@@ -187,7 +187,6 @@ export interface StudentStats {
   totalSpent: number;
 }
 
-// Filter Types
 export interface TeacherFilter {
   subjects?: string[];
   gradeLevel?: string;
@@ -195,7 +194,6 @@ export interface TeacherFilter {
   searchQuery?: string;
 }
 
-// Auth Types
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -206,9 +204,11 @@ export interface RegisterData {
   email: string;
   password: string;
   role: UserRole;
+  gradeLevel?: string;
+  bio?: string;
+  subjects?: string[];
 }
 
-// API Response Types
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -216,11 +216,10 @@ export interface ApiResponse<T> {
   errors?: string[];
 }
 
-// Price Calculation Helper
 export interface PriceCalculation {
   subjectId: string;
   gradeLevel: string;
-  duration: number; // minutes
+  duration: number;
   pricePerHour: number;
   totalAmount: number;
 }
