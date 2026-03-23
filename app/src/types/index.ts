@@ -108,10 +108,10 @@ export interface Student {
 }
 
 export interface PaymentProof {
-  id: string;
+  id: string | null;
   bookingId: string;
   fileName: string;
-  fileUrl: string;
+  fileUrl: string | null;
   uploadedAt: string;
   status: PaymentStatus;
   reviewedAt?: string;

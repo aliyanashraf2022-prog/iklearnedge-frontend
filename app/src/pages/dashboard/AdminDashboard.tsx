@@ -162,17 +162,16 @@ const AdminDashboard: React.FC = () => {
 
   const handlePaymentDecision = async (booking: Booking, status: 'approved' | 'rejected') => {
   // Use the ID from the paymentProof object if it exists, otherwise fall back to booking.id
-  const paymentProofId = booking.paymentProof?.id;
-
-  if (!paymentProofId) {
-    toast.error('Receipt data is missing for this booking');
+ const hasProof = !!booking.paymentProof?.fileUrl;
+if (!hasProof) {
+    toast.error('No receipt file uploaded by student.');
     return;
   }
 
   try {
     setSaving(true);
     // This will now send ID '6' instead of '22'
-    await paymentsAPI.verify(paymentProofId, status, paymentNotes[booking.id] || '');
+    await paymentsAPI.verify(booking.paymentProof!.id!, status, paymentNotes[booking.id] || '');
     
     toast.success(status === 'approved' ? 'Payment approved and sent to teacher' : 'Payment rejected');
     await loadDashboard();
@@ -396,7 +395,7 @@ const AdminDashboard: React.FC = () => {
 
                 {(booking.receiptUrl || booking.paymentProof?.fileUrl) ? (
                   <a
-                    href={booking.receiptUrl || booking.paymentProof?.fileUrl}
+                    href={booking.receiptUrl || booking.paymentProof?.fileUrl || '#'} 
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#f5a623]"
