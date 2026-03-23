@@ -162,7 +162,7 @@ const AdminDashboard: React.FC = () => {
 
   const handlePaymentDecision = async (booking: Booking, status: 'approved' | 'rejected') => {
   // Use the ID from the paymentProof object if it exists, otherwise fall back to booking.id
-  const paymentProofId = booking.paymentProof?.id || booking.id;
+  const paymentProofId = booking.paymentProof?.id;
 
   if (!paymentProofId) {
     toast.error('Receipt data is missing for this booking');
