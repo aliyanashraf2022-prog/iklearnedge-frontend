@@ -175,7 +175,7 @@ const mapStudent = (raw: any): Student => ({
 });
 
 const mapPaymentProof = (raw: any): PaymentProof => ({
-  id: normalizeId(raw.id || raw.paymentProofId),
+  id: normalizeId(raw.paymentProofId || raw.payment_proof_id || raw.id),
   bookingId: normalizeId(raw.bookingId || raw.booking_id),
   fileName: raw.fileName || raw.file_name || raw.paymentProofName || '',
   fileUrl: raw.fileUrl || raw.file_url || raw.paymentProofUrl || '',
