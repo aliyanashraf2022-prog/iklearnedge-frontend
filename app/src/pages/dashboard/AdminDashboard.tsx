@@ -161,24 +161,27 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handlePaymentDecision = async (booking: Booking, status: 'approved' | 'rejected') => {
-    const paymentProofId = booking.id;
+  // Use the ID from the paymentProof object if it exists, otherwise fall back to booking.id
+  const paymentProofId = booking.paymentProof?.id || booking.id;
 
-    if (!paymentProofId) {
-      toast.error('Receipt data is missing for this booking');
-      return;
-    }
+  if (!paymentProofId) {
+    toast.error('Receipt data is missing for this booking');
+    return;
+  }
 
-    try {
-      setSaving(true);
-      await paymentsAPI.verify(paymentProofId, status, paymentNotes[booking.id]);
-      toast.success(status === 'approved' ? 'Payment approved and sent to teacher' : 'Payment rejected');
-      await loadDashboard();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to review payment');
-    } finally {
-      setSaving(false);
-    }
-  };
+  try {
+    setSaving(true);
+    // This will now send ID '6' instead of '22'
+    await paymentsAPI.verify(paymentProofId, status, paymentNotes[booking.id] || '');
+    
+    toast.success(status === 'approved' ? 'Payment approved and sent to teacher' : 'Payment rejected');
+    await loadDashboard();
+  } catch (error: any) {
+    toast.error(error.message || 'Failed to review payment');
+  } finally {
+    setSaving(false);
+  }
+};
 
   const handleAddSubject = async () => {
     if (!subjectForm.name.trim()) {
